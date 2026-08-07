@@ -2,16 +2,20 @@
 
 ## Current status
 
-**Current milestone:** M0 — Project Foundation  
+**Current milestone:** M1 — BBS Baseline Reproduction  
 **Status:** IN PROGRESS
 
-**Current objective:** run the legacy tournament application as a conventional Vite + React project without changing tournament behavior.
+**Current objective:** reproduce a completed historical BBS tournament from known inputs/results and verify the generated final standings against the historical reference.
 
-**Next milestone:** M1 — BBS Baseline Reproduction.
+**Previous milestone:** M0 — Project Foundation — **COMPLETE**.
+
+**Next milestone:** M2 — Frontend / Backend / Engine Separation.
 
 ---
 
 ## M0 — Project Foundation
+
+**Status:** COMPLETE
 
 ### Goal
 
@@ -49,6 +53,8 @@ The legacy application may remain monolithic during this milestone. Correct migr
 ---
 
 ## M1 — BBS Baseline Reproduction
+
+**Status:** IN PROGRESS
 
 ### Goal
 

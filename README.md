@@ -9,12 +9,12 @@ It is deliberately separate from the **Batforce Billiards System (BBS)**:
 
 ## Project status
 
-**CURRENT milestone:** M0 — Project Foundation  
+**CURRENT milestone:** M1 — BBS Baseline Reproduction  
 **Status:** IN PROGRESS
 
-Current objective: move the legacy browser application into a conventional, version-controlled React/Vite project **without changing tournament behavior**.
+M0 — Project Foundation is **complete**: the legacy browser application runs as a conventional, version-controlled Vite/React project without changing tournament behavior.
 
-The next milestone is M1 — BBS Baseline Reproduction, where a completed historical tournament will be replayed and its final standings reproduced as a regression baseline.
+Current objective: reproduce a completed historical BBS tournament from known inputs/results and verify the generated final standings against the historical reference. This will become the regression baseline for later refactoring; mathematical equivalence has not yet been proven.
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) for the full milestone plan.
 
@@ -41,10 +41,6 @@ Project documentation uses these labels:
 Documentation must never describe TARGET or FUTURE behavior as already implemented.
 
 ## Local development
-
-**CURRENT:** M0 setup is still in progress. The canonical local commands will be documented here once the Vite migration is verified.
-
-The intended M0 end state is:
 
 ```bash
 npm install
