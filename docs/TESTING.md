@@ -15,12 +15,32 @@ invariants and representative source values.
 
 These fixtures are compatibility/reference evidence, not engine golden masters. The
 14.1 data comes from an experimental legacy implementation, while the surviving
-9-ball and 10-ball exports contain final tables only. Engine replay, numerical
-tolerances, and historical-version reconciliation remain later M1 work.
+9-ball and 10-ball exports contain final tables only. A full historical
+engine-replay golden master was not required to close M1; see "Reference
+tournament / golden master" below.
 
-## M1 — Reference tournament / golden master
+## CURRENT — Stable fixed-rack safety net
 
-A completed historical tournament will become the permanent baseline fixture.
+Focused tests now exercise the stable fixed-rack expected-score, GBR, PERF, match-point,
+standings, standard-pairing, bye, and history-recalculation behavior through a small
+shared pure-function seam. A synthetic replay fixture verifies starting-GBR reset,
+stored processing order, downstream recalculation, ignored cancelled/incomplete
+matches, and idempotence. Experimental 14.1 logic is excluded.
+
+Classic standings are tested against the whitepaper-defined `MP -> PERF -> ID` rule:
+match points strictly dominate PERF (an extreme PERF gap can never outweigh 1 MP),
+ties are resolved by average PERF, and remaining ties fall back to deterministic
+player ID. Rack Differential standings are unchanged (`MP -> Rack Differential ->
+PERF -> ID`).
+
+Together with the normalized historical fixtures above, this is the M1 baseline
+regression suite: `npm test` passes 11/11 and `npm run build` passes.
+
+## FUTURE — Reference tournament / golden master
+
+Not required to close M1. A completed historical tournament replayed end-to-end
+against expected final standings/ratings would still strengthen the regression
+baseline and remains possible future work.
 
 A preferred fixture contains:
 
@@ -34,7 +54,7 @@ tests/fixtures/reference-tournament/
   README.md
 ```
 
-The exact file format should follow the codebase once M1 begins; this diagram is conceptual rather than mandatory.
+The exact file format should follow the codebase once this fixture is built; this diagram is conceptual rather than mandatory.
 
 ## Reproduction rules
 

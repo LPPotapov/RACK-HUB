@@ -1,0 +1,22 @@
+{
+  "description": "Synthetic calculation-replay fixture; it is not a historical tournament or pairing fixture.",
+  "config": { "d": 330, "k_m": 30, "k_r": 20 },
+  "players": [
+    { "id": 1, "name": "Alpha", "startingGbr": 1700 },
+    { "id": 2, "name": "Bravo", "startingGbr": 1600 },
+    { "id": 3, "name": "Charlie", "startingGbr": 1500 },
+    { "id": 4, "name": "Delta", "startingGbr": 1400 }
+  ],
+  "rounds": {
+    "1": [
+      { "id": "r1m1", "p1": { "id": 1 }, "p2": { "id": 2 }, "r1": 5, "r2": 1, "done": true, "cancelled": false, "bye": false },
+      { "id": "r1m2", "p1": { "id": 3 }, "p2": { "id": 4 }, "r1": 3, "r2": 3, "done": true, "cancelled": false, "bye": false },
+      { "id": "cancelled", "p1": { "id": 1 }, "p2": { "id": 3 }, "r1": 6, "r2": 0, "done": true, "cancelled": true, "bye": false },
+      { "id": "incomplete", "p1": { "id": 2 }, "p2": { "id": 4 }, "r1": 4, "r2": 2, "done": false, "cancelled": false, "bye": false }
+    ],
+    "2": [
+      { "id": "r2m1", "p1": { "id": 2 }, "p2": { "id": 3 }, "r1": 4, "r2": 2, "done": true, "cancelled": false, "bye": false },
+      { "id": "r2m2", "p1": { "id": 1 }, "p2": { "id": 4 }, "r1": 2, "r2": 4, "done": true, "cancelled": false, "bye": false }
+    ]
+  }
+}
