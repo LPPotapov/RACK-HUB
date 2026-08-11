@@ -2,14 +2,14 @@
 
 ## Current status
 
-**Current milestone:** M1 — BBS Baseline Reproduction  
+**Current milestone:** M2 — Frontend / Backend / Engine Separation  
 **Status:** IN PROGRESS
 
-**Current objective:** reproduce a completed historical BBS tournament from known inputs/results and verify the generated final standings against the historical reference.
+**Current objective:** create clean architectural boundaries — extract BBS/domain calculations from large React components, establish an explicit backend/API boundary, and make backend-held tournament state authoritative — while preserving the M1 regression baseline.
 
-**Previous milestone:** M0 — Project Foundation — **COMPLETE**.
+**Previous milestone:** M1 — BBS Baseline Reproduction — **COMPLETE**.
 
-**Next milestone:** M2 — Frontend / Backend / Engine Separation.
+**Next milestone:** M3 — Live Broadcasting Skeleton.
 
 ---
 
@@ -54,7 +54,7 @@ The legacy application may remain monolithic during this milestone. Correct migr
 
 ## M1 — BBS Baseline Reproduction
 
-**Status:** IN PROGRESS
+**Status:** COMPLETE
 
 ### Goal
 
@@ -86,9 +86,34 @@ Replay the reference tournament through the application/engine and compare gener
 
 See `TESTING.md`.
 
+### Outcome
+
+M1 delivered a baseline safety net rather than a single historical full-tournament
+replay:
+
+- three historical tournament CSVs preserved as immutable source evidence, with
+  normalized fixtures and data-integrity tests for 14.1, 9-ball, and 10-ball, plus
+  manual 14.1 compatibility validation;
+- stable fixed-rack BBS logic (expected score, GBR, PERF, match points, standings,
+  standard pairing, byes, recalculation) extracted into a small pure-function
+  module (`src/fixedRackBbs.js`), covered by focused automated tests and a
+  deterministic synthetic replay fixture, and independently reviewed by a second
+  agent;
+- Classic standings corrected to the whitepaper rule (`MP -> PERF -> ID`); Rack
+  standings (`MP -> RD -> PERF -> ID`) and standard pairing (`MP -> PERF -> ID`)
+  confirmed unchanged;
+- experimental 14.1 behavior remains isolated from stable fixed-rack behavior;
+- `npm test` passes 11/11 and `npm run build` passes.
+
+A full historical reference-tournament golden master (literal replay-and-compare
+against one completed event's final standings) was not required to close M1; see
+`TESTING.md`.
+
 ---
 
 ## M2 — Frontend / Backend / Engine Separation
+
+**Status:** IN PROGRESS
 
 ### Goal
 

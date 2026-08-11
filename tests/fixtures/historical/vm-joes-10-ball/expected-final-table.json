@@ -1,0 +1,401 @@
+[
+  {
+    "placement": 1,
+    "player": "Maik Schlegel",
+    "roundResults": {
+      "r1": 1,
+      "r2": 1,
+      "r3": 1,
+      "r4": 0.5
+    },
+    "matchPoints": 3.5,
+    "prestige": 80,
+    "eventScore": 86,
+    "games": 4,
+    "racksWon": 22,
+    "racksLost": 10,
+    "rackDifferential": 12,
+    "averagePerf": 1765,
+    "startingGbr": 1720,
+    "finalGbr": 1753,
+    "gbrChange": 33
+  },
+  {
+    "placement": 2,
+    "player": "Paul Weißbach",
+    "roundResults": {
+      "r1": 1,
+      "r2": 1,
+      "r3": 1,
+      "r4": 0.5
+    },
+    "matchPoints": 3.5,
+    "prestige": 81,
+    "eventScore": 84,
+    "games": 4,
+    "racksWon": 20,
+    "racksLost": 12,
+    "rackDifferential": 8,
+    "averagePerf": 1757,
+    "startingGbr": 1722,
+    "finalGbr": 1762,
+    "gbrChange": 40
+  },
+  {
+    "placement": 3,
+    "player": "Renato Tupas",
+    "roundResults": {
+      "r1": 0.5,
+      "r2": 0.5,
+      "r3": 1,
+      "r4": 1
+    },
+    "matchPoints": 3,
+    "prestige": 74,
+    "eventScore": 76,
+    "games": 4,
+    "racksWon": 22,
+    "racksLost": 10,
+    "rackDifferential": 12,
+    "averagePerf": 1705,
+    "startingGbr": 1716,
+    "finalGbr": 1715,
+    "gbrChange": -1
+  },
+  {
+    "placement": 4,
+    "player": "Richard Juros",
+    "roundResults": {
+      "r1": 1,
+      "r2": 1,
+      "r3": 0,
+      "r4": 1
+    },
+    "matchPoints": 3,
+    "prestige": 75,
+    "eventScore": 76,
+    "games": 4,
+    "racksWon": 21,
+    "racksLost": 11,
+    "rackDifferential": 10,
+    "averagePerf": 1804,
+    "startingGbr": 1798,
+    "finalGbr": 1809,
+    "gbrChange": 11
+  },
+  {
+    "placement": 5,
+    "player": "Carsten Gäbler",
+    "roundResults": {
+      "r1": 1,
+      "r2": 0,
+      "r3": 0.5,
+      "r4": 1
+    },
+    "matchPoints": 2.5,
+    "prestige": 68,
+    "eventScore": 66,
+    "games": 4,
+    "racksWon": 21,
+    "racksLost": 11,
+    "rackDifferential": 10,
+    "averagePerf": 1739,
+    "startingGbr": 1682,
+    "finalGbr": 1687,
+    "gbrChange": 5
+  },
+  {
+    "placement": 6,
+    "player": "Michael Nuck",
+    "roundResults": {
+      "r1": 0,
+      "r2": 1,
+      "r3": 1,
+      "r4": "-"
+    },
+    "matchPoints": 2,
+    "prestige": 54,
+    "eventScore": 57,
+    "games": 3,
+    "racksWon": 16,
+    "racksLost": 8,
+    "rackDifferential": 8,
+    "averagePerf": 1754,
+    "startingGbr": 1599,
+    "finalGbr": 1621,
+    "gbrChange": 22
+  },
+  {
+    "placement": 7,
+    "player": "Leonid Potapov",
+    "roundResults": {
+      "r1": "-",
+      "r2": 1,
+      "r3": 0,
+      "r4": 1
+    },
+    "matchPoints": 2,
+    "prestige": 56,
+    "eventScore": 54,
+    "games": 3,
+    "racksWon": 13,
+    "racksLost": 11,
+    "rackDifferential": 2,
+    "averagePerf": 1705,
+    "startingGbr": 1631,
+    "finalGbr": 1657,
+    "gbrChange": 26
+  },
+  {
+    "placement": 8,
+    "player": "Janoš Nuck",
+    "roundResults": {
+      "r1": 1,
+      "r2": 0,
+      "r3": 1,
+      "r4": 0
+    },
+    "matchPoints": 2,
+    "prestige": 61,
+    "eventScore": 53,
+    "games": 4,
+    "racksWon": 17,
+    "racksLost": 15,
+    "rackDifferential": 2,
+    "averagePerf": 1616,
+    "startingGbr": 1753,
+    "finalGbr": 1715,
+    "gbrChange": -38
+  },
+  {
+    "placement": 9,
+    "player": "Thomas Dahlmann",
+    "roundResults": {
+      "r1": 0.5,
+      "r2": 0.5,
+      "r3": 0,
+      "r4": 1
+    },
+    "matchPoints": 2,
+    "prestige": 61,
+    "eventScore": 51,
+    "games": 4,
+    "racksWon": 16,
+    "racksLost": 16,
+    "rackDifferential": 0,
+    "averagePerf": 1482,
+    "startingGbr": 1656,
+    "finalGbr": 1613,
+    "gbrChange": -43
+  },
+  {
+    "placement": 10,
+    "player": "Roberto Stephan",
+    "roundResults": {
+      "r1": 0,
+      "r2": 0,
+      "r3": 1,
+      "r4": 1
+    },
+    "matchPoints": 2,
+    "prestige": 65,
+    "eventScore": 49,
+    "games": 4,
+    "racksWon": 14,
+    "racksLost": 18,
+    "rackDifferential": -4,
+    "averagePerf": 1491,
+    "startingGbr": 1447,
+    "finalGbr": 1469,
+    "gbrChange": 22
+  },
+  {
+    "placement": 11,
+    "player": "Henry Heim",
+    "roundResults": {
+      "r1": 0,
+      "r2": 1,
+      "r3": 1,
+      "r4": 0
+    },
+    "matchPoints": 2,
+    "prestige": 63,
+    "eventScore": 49,
+    "games": 4,
+    "racksWon": 9,
+    "racksLost": 15,
+    "rackDifferential": -6,
+    "averagePerf": 1533,
+    "startingGbr": 1410,
+    "finalGbr": 1428,
+    "gbrChange": 18
+  },
+  {
+    "placement": 12,
+    "player": "Paul Samuel Heim",
+    "roundResults": {
+      "r1": 1,
+      "r2": 0,
+      "r3": 0.5,
+      "r4": "-"
+    },
+    "matchPoints": 1.5,
+    "prestige": 46,
+    "eventScore": 44,
+    "games": 3,
+    "racksWon": 12,
+    "racksLost": 12,
+    "rackDifferential": 0,
+    "averagePerf": 1673,
+    "startingGbr": 1747,
+    "finalGbr": 1731,
+    "gbrChange": -16
+  },
+  {
+    "placement": 13,
+    "player": "Uwe Draeger",
+    "roundResults": {
+      "r1": 0,
+      "r2": 0.5,
+      "r3": 0,
+      "r4": 1
+    },
+    "matchPoints": 1.5,
+    "prestige": 56,
+    "eventScore": 41,
+    "games": 4,
+    "racksWon": 15,
+    "racksLost": 17,
+    "rackDifferential": -2,
+    "averagePerf": 1490,
+    "startingGbr": 1546,
+    "finalGbr": 1519,
+    "gbrChange": -27
+  },
+  {
+    "placement": 14,
+    "player": "Henry Zieger",
+    "roundResults": {
+      "r1": 0,
+      "r2": 0.5,
+      "r3": 1,
+      "r4": 0
+    },
+    "matchPoints": 1.5,
+    "prestige": 61,
+    "eventScore": 38,
+    "games": 4,
+    "racksWon": 11,
+    "racksLost": 21,
+    "rackDifferential": -10,
+    "averagePerf": 1499,
+    "startingGbr": 1468,
+    "finalGbr": 1491,
+    "gbrChange": 23
+  },
+  {
+    "placement": 15,
+    "player": "Conny Martin-Schwabe",
+    "roundResults": {
+      "r1": 0.5,
+      "r2": 0.5,
+      "r3": 0,
+      "r4": 0
+    },
+    "matchPoints": 1,
+    "prestige": 53,
+    "eventScore": 31,
+    "games": 4,
+    "racksWon": 14,
+    "racksLost": 18,
+    "rackDifferential": -4,
+    "averagePerf": 1486,
+    "startingGbr": 1433,
+    "finalGbr": 1420,
+    "gbrChange": -13
+  },
+  {
+    "placement": 16,
+    "player": "Quang Anh Tran",
+    "roundResults": {
+      "r1": 0,
+      "r2": 1,
+      "r3": 0,
+      "r4": 0
+    },
+    "matchPoints": 1,
+    "prestige": 52,
+    "eventScore": 31,
+    "games": 4,
+    "racksWon": 13,
+    "racksLost": 19,
+    "rackDifferential": -6,
+    "averagePerf": 1555,
+    "startingGbr": 1556,
+    "finalGbr": 1536,
+    "gbrChange": -20
+  },
+  {
+    "placement": 17,
+    "player": "Greta Dahlmann",
+    "roundResults": {
+      "r1": 0.5,
+      "r2": 0.5,
+      "r3": 0,
+      "r4": 0
+    },
+    "matchPoints": 1,
+    "prestige": 54,
+    "eventScore": 30,
+    "games": 4,
+    "racksWon": 12,
+    "racksLost": 20,
+    "rackDifferential": -8,
+    "averagePerf": 1486,
+    "startingGbr": 1334,
+    "finalGbr": 1352,
+    "gbrChange": 18
+  },
+  {
+    "placement": 18,
+    "player": "Anton Schönberger",
+    "roundResults": {
+      "r1": 1,
+      "r2": 0,
+      "r3": 0,
+      "r4": "-"
+    },
+    "matchPoints": 1,
+    "prestige": 40,
+    "eventScore": 28,
+    "games": 3,
+    "racksWon": 7,
+    "racksLost": 17,
+    "rackDifferential": -10,
+    "averagePerf": 1407,
+    "startingGbr": 1682,
+    "finalGbr": 1641,
+    "gbrChange": -41
+  },
+  {
+    "placement": 19,
+    "player": "Sebastian Bellmann",
+    "roundResults": {
+      "r1": 0,
+      "r2": 0,
+      "r3": 1,
+      "r4": 0
+    },
+    "matchPoints": 1,
+    "prestige": 50,
+    "eventScore": 26,
+    "games": 4,
+    "racksWon": 5,
+    "racksLost": 19,
+    "rackDifferential": -14,
+    "averagePerf": 1351,
+    "startingGbr": 1393,
+    "finalGbr": 1375,
+    "gbrChange": -18
+  }
+]

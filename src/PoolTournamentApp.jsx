@@ -321,6 +321,17 @@
 
 import React, { useState, useEffect } from 'react';
 import { Play, Edit, Trash2, UserPlus, UserMinus, Table, RotateCw, User, Target, XCircle, Download } from 'lucide-react';
+import {
+  applyFixedRackMatch,
+  classicStandingScore,
+  compareFixedRackPairingOrder,
+  compareFixedRackStandings,
+  expectedScore,
+  gbrChange,
+  pairingCost,
+  performanceGbr,
+  selectEligibleBye
+} from './fixedRackBbs.js';
 
 const PoolTournamentApp = () => {
   // Configuration and state
@@ -334,7 +345,7 @@ const PoolTournamentApp = () => {
     rp_per_round: 10,
     rp_per_mp: 10,
     rp_elo_multiplier: 0.15,
-    ranking_system: 'classic', // 'classic' (MP + Perf/10000) or 'racks' (MP -> Racks -> Perf)
+    ranking_system: 'classic', // 'classic' (MP -> Perf -> ID) or 'racks' (MP -> Racks -> Perf -> ID)
     use_rank: false, // Optional placement-based tournament series score
     // v1.92: tournament format. 'fixed_rack' = existing stable behavior (default).
     format: 'fixed_rack', // 'fixed_rack' | 'straight_pool_14_1'
@@ -417,38 +428,18 @@ const PoolTournamentApp = () => {
   // Load default players
 
   // Calculate expected score
-  const calcExpected = (e1, e2) => 1 / (1 + Math.pow(10, (e2 - e1) / config.d));
+  const calcExpected = (e1, e2) => expectedScore(e1, e2, config.d);
   
   // Calculate ELO change (zero-sum with match and rack k-factors)
-  const calcEloChange = (elo1, elo2, r1, r2) => {
-    if (r1 + r2 === 0) return 0;
-    
-    // Match-level contribution (who won the match)
-    const expectedMatch = calcExpected(elo1, elo2);
-    const actualMatch = r1 > r2 ? 1 : r1 < r2 ? 0 : 0.5;
-    const matchContribution = config.k_m * (actualMatch - expectedMatch);
-    
-    // Rack-level contribution (magnitude of win)
-    const expectedRack = calcExpected(elo1, elo2);
-    const actualRack = r1 / (r1 + r2);
-    const rackContribution = config.k_r * (actualRack - expectedRack);
-    
-    return matchContribution + rackContribution;
-  };
+  const calcEloChange = (elo1, elo2, r1, r2) => gbrChange(elo1, elo2, r1, r2, config);
 
   // Calculate performance GBR (PERF). Whitepaper §4.3: perfect/zero rack scores
   // are capped at ±3d (with default d=330 this gives ±990, ~99.9% / 0.1% implied).
-  const calcPerformanceElo = (opponentElo, myRacks, oppRacks) => {
-    if (myRacks + oppRacks === 0) return opponentElo;
-    const actualScore = myRacks / (myRacks + oppRacks);
-    if (actualScore === 1) return opponentElo + 3 * config.d; // PERF cap: opponent + 3d
-    if (actualScore === 0) return opponentElo - 3 * config.d; // PERF cap: opponent - 3d
-    const performanceElo = opponentElo + config.d * Math.log10(actualScore / (1 - actualScore));
-    return Math.round(performanceElo);
-  };
+  const calcPerformanceElo = (opponentElo, myRacks, oppRacks) =>
+    performanceGbr(opponentElo, myRacks, oppRacks, config.d);
 
   // Calculate score for sorting
-  const calcScore = (mp, avgPerf) => mp + avgPerf / 10000;
+  const calcScore = classicStandingScore;
 
   // ===================================================================
   // v1.92: GBR_14.1 EXPERIMENTAL (straight pool) helpers
@@ -769,33 +760,9 @@ const PoolTournamentApp = () => {
       return compareStraightPool(playerA, playerB);
     }
     if (config.ranking_system === 'racks') {
-      // Racks system: MP -> Rack Diff -> Performance
-      // 1. Compare match points
-      if (playerB.mp !== playerA.mp) return playerB.mp - playerA.mp;
-      
-      // 2. Compare rack differential (racks won - racks lost)
-      const rackDiffA = (playerA.racksWon || 0) - (playerA.racksLost || 0);
-      const rackDiffB = (playerB.racksWon || 0) - (playerB.racksLost || 0);
-      if (rackDiffB !== rackDiffA) return rackDiffB - rackDiffA;
-      
-      // 3. Compare average performance
-      const avgPerfA = playerA.perfCount > 0 ? playerA.perf / playerA.perfCount : 0;
-      const avgPerfB = playerB.perfCount > 0 ? playerB.perf / playerB.perfCount : 0;
-      if (avgPerfB !== avgPerfA) return avgPerfB - avgPerfA;
-      
-      // 4. Tie-breaker: player ID
-      return playerA.id - playerB.id;
-    } else {
-      // Classic system: Score (MP + Perf/10000)
-      const avgPerfA = playerA.perfCount > 0 ? playerA.perf / playerA.perfCount : 0;
-      const avgPerfB = playerB.perfCount > 0 ? playerB.perf / playerB.perfCount : 0;
-      const scoreA = calcScore(playerA.mp, avgPerfA);
-      const scoreB = calcScore(playerB.mp, avgPerfB);
-      if (scoreB !== scoreA) return scoreB - scoreA;
-      
-      // Tie-breaker: player ID
-      return playerA.id - playerB.id;
+      return compareFixedRackStandings(playerA, playerB, 'racks');
     }
+    return compareFixedRackStandings(playerA, playerB, 'classic');
   };
 
   // Compare players for pairing order (NOT final standings)
@@ -806,16 +773,7 @@ const PoolTournamentApp = () => {
     if (isStraightPool()) {
       return compareStraightPool(playerA, playerB);
     }
-    // 1. Compare match points
-    if (playerB.mp !== playerA.mp) return playerB.mp - playerA.mp;
-    
-    // 2. Compare average performance
-    const avgPerfA = playerA.perfCount > 0 ? playerA.perf / playerA.perfCount : 0;
-    const avgPerfB = playerB.perfCount > 0 ? playerB.perf / playerB.perfCount : 0;
-    if (avgPerfB !== avgPerfA) return avgPerfB - avgPerfA;
-    
-    // 3. Stable tie-breaker: player ID
-    return playerA.id - playerB.id;
+    return compareFixedRackPairingOrder(playerA, playerB);
   };
 
   // Calculate Prestige Score (snapshot calculation from tournament start)
@@ -991,32 +949,22 @@ const PoolTournamentApp = () => {
     // STEP 1: DETERMINISTIC BYE ASSIGNMENT (if odd player count)
     // Bye MUST go to lowest-ranked eligible player based on active ranking system
     if (players.length % 2 === 1) {
-      // Players are already sorted by compareRankings (active ranking system)
-      // Search from END (lowest-ranked) to find first eligible player
-      let byeAssigned = false;
-      
-      for (let i = players.length - 1; i >= 0 && !byeAssigned; i--) {
-        const candidate = players[i];
-        const isEligible = !byeHistory.has(candidate.id) && !newPlayerIds.has(candidate.id);
-        
-        if (isEligible) {
-          // Assign bye to this lowest-ranked eligible player
-          paired.add(candidate.id);
-          matches.push({
-            p1: candidate,
-            p2: { id: 'bye', name: 'FREILOS', elo: 1300 },
-            bye: true
-          });
-          byeAssigned = true;
-          console.log(`Bye assigned to lowest-ranked eligible: ${candidate.name}`);
-        }
+      const candidate = selectEligibleBye(players, byeHistory, newPlayerIds);
+      if (candidate) {
+        paired.add(candidate.id);
+        matches.push({
+          p1: candidate,
+          p2: { id: 'bye', name: 'FREILOS', elo: 1300 },
+          bye: true
+        });
+        console.log(`Bye assigned to lowest-ranked eligible: ${candidate.name}`);
       }
       
       // Whitepaper §9.2: repeated byes are illegal. If NO eligible player exists
       // (all active players have already had a bye, or all remaining are new and
       // protected), DO NOT assign a repeat bye. Signal failure to the caller so a
       // visible error is shown and the director can resolve it manually.
-      if (!byeAssigned) {
+      if (!candidate) {
         console.error('No legal bye available: every active player has already received a bye.');
         return null;
       }
@@ -1110,15 +1058,11 @@ const PoolTournamentApp = () => {
           const p2 = players[j];
           
           // Calculate cost for this pairing
-          const mpGap = Math.abs((p1.mp || 0) - (p2.mp || 0));
-          const perfGap = Math.abs((p1.avgPerf || p1.elo) - (p2.avgPerf || p2.elo));
-          const repeatPenalty = (p1.opps || []).includes(p2.id) ? 100000 : 0;
-          
           // Standard pairing cost (whitepaper §8.9):
           //   C = Prep + 10000*ΔMP + ΔPERF
           // Prep = 100000 if already played, else 0. Rack Differential is NOT used
           // in standard pairing (it remains only a final-standings tiebreaker).
-          const cost = repeatPenalty + mpGap * 10000 + perfGap;
+          const cost = pairingCost(p1, p2);
           
           if (cost < lowestCost) {
             lowestCost = cost;
@@ -1378,62 +1322,7 @@ const PoolTournamentApp = () => {
             return; // done with this 14.1 match
           }
 
-          const mp1 = match.bye ? 1 : (match.r1 > match.r2 ? 1 : match.r1 === match.r2 ? 0.5 : 0); // bye = +1 MP (whitepaper §9.3)
-          const mp2 = match.r2 > match.r1 ? 1 : match.r2 === match.r1 ? 0.5 : 0;
-
-          if (!match.bye) {
-            const p1Current = curr.find(p => p.id === match.p1.id);
-            const p2Current = curr.find(p => p.id === match.p2.id);
-
-            const p1EloBefore = p1Current.elo;
-            const p2EloBefore = p2Current.elo;
-
-            const eloChange = calcEloChange(p1EloBefore, p2EloBefore, match.r1, match.r2);
-            const pf1 = calcPerformanceElo(p2EloBefore, match.r1, match.r2);
-            const pf2 = calcPerformanceElo(p1EloBefore, match.r2, match.r1);
-
-            const rp1 = calcRoundRP(mp1, eloChange);
-            const rp2 = calcRoundRP(mp2, -eloChange);
-
-            curr = curr.map(p => {
-              if (p.id === match.p1.id) return {
-                ...p,
-                mp: p.mp + mp1,
-                perf: p.perf + pf1,
-                perfCount: p.perfCount + 1,
-                elo: p.elo + eloChange,
-                games: p.games + 1,
-                opps: p.opps.includes(match.p2.id) ? p.opps : [...p.opps, match.p2.id],
-                rp: p.rp + rp1,
-                racksWon: p.racksWon + match.r1,   // Racks won by player 1
-                racksLost: p.racksLost + match.r2  // Racks won by opponent
-              };
-              if (p.id === match.p2.id) return {
-                ...p,
-                mp: p.mp + mp2,
-                perf: p.perf + pf2,
-                perfCount: p.perfCount + 1,
-                elo: p.elo - eloChange,
-                games: p.games + 1,
-                opps: p.opps.includes(match.p1.id) ? p.opps : [...p.opps, match.p1.id],
-                rp: p.rp + rp2,
-                racksWon: p.racksWon + match.r2,   // Racks won by player 2
-                racksLost: p.racksLost + match.r1  // Racks won by opponent
-              };
-              return p;
-            });
-          } else {
-            const rp1 = calcRoundRP(mp1, 0);
-            curr = curr.map(p => {
-              if (p.id === match.p1.id) return {
-                ...p,
-                mp: p.mp + mp1,
-                games: p.games + 1,
-                rp: p.rp + rp1
-              };
-              return p;
-            });
-          }
+          curr = applyFixedRackMatch(curr, match, config, calcRoundRP);
         }
       });
     }
@@ -1836,7 +1725,7 @@ const PoolTournamentApp = () => {
       resultsCsv += `Format:,${isStraightPool() ? 'Straight Pool 14.1 — GBR_14.1 Experimental' : 'Fixed-Rack Pool'}\n`;
       resultsCsv += `Total Rounds:,${tournament.totalRounds}\n`;
       resultsCsv += `Total Players:,${sorted.length}\n`;
-      resultsCsv += `Ranking System:,${isStraightPool() ? (config.ranking_system === 'racks' ? 'Point Differential 14.1 (MP -> Point Diff -> 14.1 PERF -> GD -> HS)' : 'Classic 14.1 (MP -> 14.1 PERF -> Point Diff -> GD -> HS)') : (config.ranking_system === 'classic' ? 'Classic (MP + Perf/10000)' : 'Rack Differential')}\n`;
+      resultsCsv += `Ranking System:,${isStraightPool() ? (config.ranking_system === 'racks' ? 'Point Differential 14.1 (MP -> Point Diff -> 14.1 PERF -> GD -> HS)' : 'Classic 14.1 (MP -> 14.1 PERF -> Point Diff -> GD -> HS)') : (config.ranking_system === 'classic' ? 'Classic (MP -> Perf -> ID)' : 'Rack Differential')}\n`;
       resultsCsv += `Prestige Score:,${config.use_rp ? 'Enabled' : 'Disabled'}\n`;
       resultsCsv += `Event Score:,${config.use_rank ? 'Enabled' : 'Disabled'}\n`;
       if (isStraightPool()) {
@@ -2895,7 +2784,7 @@ const PoolTournamentApp = () => {
                       </>
                     ) : (
                       <>
-                        <option value="classic">Classic (Match Points + Performance/10000)</option>
+                        <option value="classic">Classic (MP → Performance → ID)</option>
                         <option value="racks">Rack Differential (MP → Rack Diff → Performance)</option>
                       </>
                     )}
@@ -2906,7 +2795,7 @@ const PoolTournamentApp = () => {
                           ? 'Players ranked by: 1st Match Points, 2nd 14.1 PERF, 3rd Point Diff, then GD, HS.'
                           : 'Players ranked by: 1st Match Points, 2nd Point Diff (P+ − P−), 3rd 14.1 PERF, then GD, HS.')
                       : (config.ranking_system === 'classic' 
-                          ? 'Players ranked by: MP + Avg Performance / 10000. Simple scoring system.'
+                          ? 'Players ranked by: 1st Match Points, 2nd Avg Performance, 3rd Player ID.'
                           : 'Players ranked by: 1st Match Points, 2nd Rack Differential (racks won - racks lost), 3rd Avg Performance. Fairer for late-joining players.')}
                   </p>
                   {config.format === 'straight_pool_14_1' && (

@@ -9,12 +9,12 @@ It is deliberately separate from the **Batforce Billiards System (BBS)**:
 
 ## Project status
 
-**CURRENT milestone:** M1 — BBS Baseline Reproduction  
+**CURRENT milestone:** M2 — Frontend / Backend / Engine Separation  
 **Status:** IN PROGRESS
 
-M0 — Project Foundation is **complete**: the legacy browser application runs as a conventional, version-controlled Vite/React project without changing tournament behavior.
+M1 — BBS Baseline Reproduction is **complete**: stable fixed-rack BBS behavior (expected score, GBR, PERF, match points, standings, pairing, byes, recalculation) is covered by an automated regression suite extracted into `src/fixedRackBbs.js`, alongside preserved and normalized historical tournament evidence.
 
-Current objective: reproduce a completed historical BBS tournament from known inputs/results and verify the generated final standings against the historical reference. This will become the regression baseline for later refactoring; mathematical equivalence has not yet been proven.
+Current objective: separate the BBS/domain engine, backend, and frontend into clean architectural boundaries while preserving the M1 regression baseline.
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) for the full milestone plan.
 
