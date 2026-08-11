@@ -427,9 +427,6 @@ const PoolTournamentApp = () => {
 
   // Load default players
 
-  // Calculate expected score
-  const calcExpected = (e1, e2) => expectedScore(e1, e2, config.d);
-  
   // Calculate ELO change (zero-sum with match and rack k-factors)
   const calcEloChange = (elo1, elo2, r1, r2) => gbrChange(elo1, elo2, r1, r2, config);
 
@@ -437,9 +434,6 @@ const PoolTournamentApp = () => {
   // are capped at ±3d (with default d=330 this gives ±990, ~99.9% / 0.1% implied).
   const calcPerformanceElo = (opponentElo, myRacks, oppRacks) =>
     performanceGbr(opponentElo, myRacks, oppRacks, config.d);
-
-  // Calculate score for sorting
-  const calcScore = classicStandingScore;
 
   // ===================================================================
   // v1.92: GBR_14.1 EXPERIMENTAL (straight pool) helpers
@@ -511,7 +505,7 @@ const PoolTournamentApp = () => {
       matchData.p1Points, matchData.p2Points, matchData.innings,
       matchData.p1HighRun, matchData.p2HighRun, target, sp
     );
-    const eA = calcExpected(gbr1, gbr2);
+    const eA = expectedScore(gbr1, gbr2, config.d);
     const dMatch = config.k_m * (sMatch - eA);
     const kEff = sp.useTargetScaledK
       ? sp.k_14_1 * Math.sqrt(target / (sp.targetReference || 40))
@@ -3217,8 +3211,8 @@ const PoolTournamentApp = () => {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 {(allRounds[viewingRound] || []).map(m => {
-                  const p1Expected = m.bye ? 1 : calcExpected(m.p1.elo, m.p2.elo);
-                  const p2Expected = m.bye ? 0 : calcExpected(m.p2.elo, m.p1.elo);
+                  const p1Expected = m.bye ? 1 : expectedScore(m.p1.elo, m.p2.elo, config.d);
+                  const p2Expected = m.bye ? 0 : expectedScore(m.p2.elo, m.p1.elo, config.d);
 
                   return (
                     <div
@@ -3652,7 +3646,7 @@ const PoolTournamentApp = () => {
                               {config.ranking_system === 'classic' && (
                                 <div className="text-right">
                                   <div className="text-slate-400">Score</div>
-                                  <div className="text-yellow-400 font-bold">{calcScore(s.mp, avgPerfValue).toFixed(4)}</div>
+                                  <div className="text-yellow-400 font-bold">{classicStandingScore(s.mp, avgPerfValue).toFixed(4)}</div>
                                 </div>
                               )}
                               <div className="text-right">
@@ -3846,7 +3840,7 @@ const PoolTournamentApp = () => {
                               {isStraightPool()
                                 ? `${p.mp} MP`
                                 : (config.ranking_system === 'classic' 
-                                    ? calcScore(p.mp, p.avgPerf).toFixed(4)
+                                    ? classicStandingScore(p.mp, p.avgPerf).toFixed(4)
                                     : `${p.mp} MP`)}
                             </div>
                             <div className="text-slate-400 text-xs whitespace-nowrap">
@@ -4275,7 +4269,7 @@ const PoolTournamentApp = () => {
                                     {config.ranking_system === 'classic' && (
                                       <div className="text-right">
                                         <div className="text-slate-400">Score</div>
-                                        <div className="text-yellow-400 font-bold">{calcScore(s.mp, avgPerfValue).toFixed(4)}</div>
+                                        <div className="text-yellow-400 font-bold">{classicStandingScore(s.mp, avgPerfValue).toFixed(4)}</div>
                                       </div>
                                     )}
                                     <div className="text-right">
