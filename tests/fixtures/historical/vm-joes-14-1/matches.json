@@ -1,0 +1,722 @@
+[
+  {
+    "round": 1,
+    "table": "304",
+    "playerA": "Richard Juros",
+    "playerB": "Leonid Potapov",
+    "exportedTarget": 30,
+    "actualTarget": null,
+    "actualTargetSource": null,
+    "pointsA": 30,
+    "pointsB": 16,
+    "innings": 9,
+    "highRunA": 9,
+    "highRunB": 4,
+    "gdA": 3.33,
+    "gdB": 1.78,
+    "matchPointsA": 1,
+    "matchPointsB": 0,
+    "historicalPerfA": 1782,
+    "historicalPerfB": 1684,
+    "historicalGbrA": {
+      "before": 1809,
+      "change": 7,
+      "after": 1816
+    },
+    "historicalGbrB": {
+      "before": 1657,
+      "change": -7,
+      "after": 1650
+    }
+  },
+  {
+    "round": 1,
+    "table": "302",
+    "playerA": "Paul Weißbach",
+    "playerB": "Stefan Loreck",
+    "exportedTarget": 30,
+    "actualTarget": null,
+    "actualTargetSource": null,
+    "pointsA": 30,
+    "pointsB": 1,
+    "innings": 4,
+    "highRunA": 30,
+    "highRunB": 1,
+    "gdA": 7.5,
+    "gdB": 0.25,
+    "matchPointsA": 1,
+    "matchPointsB": 0,
+    "historicalPerfA": 2125,
+    "historicalPerfB": 1224,
+    "historicalGbrA": {
+      "before": 1762,
+      "change": 11,
+      "after": 1773
+    },
+    "historicalGbrB": {
+      "before": 1587,
+      "change": -11,
+      "after": 1576
+    }
+  },
+  {
+    "round": 1,
+    "table": "303",
+    "playerA": "Paul Samuel Heim",
+    "playerB": "Quang Anh Tran",
+    "exportedTarget": 30,
+    "actualTarget": null,
+    "actualTargetSource": null,
+    "pointsA": 13,
+    "pointsB": 30,
+    "innings": 8,
+    "highRunA": 6,
+    "highRunB": 12,
+    "gdA": 1.63,
+    "gdB": 3.75,
+    "matchPointsA": 0,
+    "matchPointsB": 1,
+    "historicalPerfA": 1382,
+    "historicalPerfB": 1885,
+    "historicalGbrA": {
+      "before": 1731,
+      "change": -35,
+      "after": 1696
+    },
+    "historicalGbrB": {
+      "before": 1536,
+      "change": 35,
+      "after": 1571
+    }
+  },
+  {
+    "round": 1,
+    "table": "301",
+    "playerA": "Janoš Nuck",
+    "playerB": "Henry Zieger",
+    "exportedTarget": 30,
+    "actualTarget": null,
+    "actualTargetSource": null,
+    "pointsA": 30,
+    "pointsB": 4,
+    "innings": 6,
+    "highRunA": 12,
+    "highRunB": 2,
+    "gdA": 5,
+    "gdB": 0.67,
+    "matchPointsA": 1,
+    "matchPointsB": 0,
+    "historicalPerfA": 1823,
+    "historicalPerfB": 1383,
+    "historicalGbrA": {
+      "before": 1715,
+      "change": 7,
+      "after": 1722
+    },
+    "historicalGbrB": {
+      "before": 1491,
+      "change": -7,
+      "after": 1484
+    }
+  },
+  {
+    "round": 1,
+    "table": "201",
+    "playerA": "Carsten Gäbler",
+    "playerB": "Henry Heim",
+    "exportedTarget": 30,
+    "actualTarget": null,
+    "actualTargetSource": null,
+    "pointsA": 30,
+    "pointsB": 7,
+    "innings": 10,
+    "highRunA": 12,
+    "highRunB": 3,
+    "gdA": 3,
+    "gdB": 0.7,
+    "matchPointsA": 1,
+    "matchPointsB": 0,
+    "historicalPerfA": 1680,
+    "historicalPerfB": 1435,
+    "historicalGbrA": {
+      "before": 1687,
+      "change": 4,
+      "after": 1691
+    },
+    "historicalGbrB": {
+      "before": 1428,
+      "change": -4,
+      "after": 1424
+    }
+  },
+  {
+    "round": 2,
+    "table": "301",
+    "playerA": "Paul Weißbach",
+    "playerB": "Quang Anh Tran",
+    "exportedTarget": 40,
+    "actualTarget": null,
+    "actualTargetSource": null,
+    "pointsA": 40,
+    "pointsB": 14,
+    "innings": 6,
+    "highRunA": 16,
+    "highRunB": 9,
+    "gdA": 6.67,
+    "gdB": 2.33,
+    "matchPointsA": 1,
+    "matchPointsB": 0,
+    "historicalPerfA": 1753,
+    "historicalPerfB": 1591,
+    "historicalGbrA": {
+      "before": 1773,
+      "change": 5,
+      "after": 1778
+    },
+    "historicalGbrB": {
+      "before": 1571,
+      "change": -5,
+      "after": 1565
+    }
+  },
+  {
+    "round": 2,
+    "table": "302",
+    "playerA": "Janoš Nuck",
+    "playerB": "Richard Juros",
+    "exportedTarget": 40,
+    "actualTarget": null,
+    "actualTargetSource": null,
+    "pointsA": 40,
+    "pointsB": 2,
+    "innings": 5,
+    "highRunA": 28,
+    "highRunB": 2,
+    "gdA": 8,
+    "gdB": 0.4,
+    "matchPointsA": 1,
+    "matchPointsB": 0,
+    "historicalPerfA": 2287,
+    "historicalPerfB": 1251,
+    "historicalGbrA": {
+      "before": 1722,
+      "change": 34,
+      "after": 1756
+    },
+    "historicalGbrB": {
+      "before": 1816,
+      "change": -34,
+      "after": 1782
+    }
+  },
+  {
+    "round": 2,
+    "table": "304",
+    "playerA": "Carsten Gäbler",
+    "playerB": "Leonid Potapov",
+    "exportedTarget": 40,
+    "actualTarget": null,
+    "actualTargetSource": null,
+    "pointsA": 10,
+    "pointsB": 40,
+    "innings": 13,
+    "highRunA": 3,
+    "highRunB": 19,
+    "gdA": 0.77,
+    "gdB": 3.08,
+    "matchPointsA": 0,
+    "matchPointsB": 1,
+    "historicalPerfA": 1400,
+    "historicalPerfB": 1941,
+    "historicalGbrA": {
+      "before": 1691,
+      "change": -27,
+      "after": 1664
+    },
+    "historicalGbrB": {
+      "before": 1650,
+      "change": 27,
+      "after": 1677
+    }
+  },
+  {
+    "round": 2,
+    "table": "303",
+    "playerA": "Paul Samuel Heim",
+    "playerB": "Henry Zieger",
+    "exportedTarget": 30,
+    "actualTarget": null,
+    "actualTargetSource": null,
+    "pointsA": 30,
+    "pointsB": 4,
+    "innings": 5,
+    "highRunA": 11,
+    "highRunB": 3,
+    "gdA": 6,
+    "gdB": 0.8,
+    "matchPointsA": 1,
+    "matchPointsB": 0,
+    "historicalPerfA": 1804,
+    "historicalPerfB": 1376,
+    "historicalGbrA": {
+      "before": 1696,
+      "change": 7,
+      "after": 1704
+    },
+    "historicalGbrB": {
+      "before": 1484,
+      "change": -7,
+      "after": 1477
+    }
+  },
+  {
+    "round": 2,
+    "table": "201",
+    "playerA": "Henry Heim",
+    "playerB": "Stefan Loreck",
+    "exportedTarget": 20,
+    "actualTarget": null,
+    "actualTargetSource": null,
+    "pointsA": 11,
+    "pointsB": 30,
+    "innings": 19,
+    "highRunA": 3,
+    "highRunB": 3,
+    "gdA": 0.58,
+    "gdB": 1.58,
+    "matchPointsA": 0,
+    "matchPointsB": 1,
+    "historicalPerfA": 1322,
+    "historicalPerfB": 1678,
+    "historicalGbrA": {
+      "before": 1424,
+      "change": -10,
+      "after": 1414
+    },
+    "historicalGbrB": {
+      "before": 1576,
+      "change": 10,
+      "after": 1586
+    }
+  },
+  {
+    "round": 3,
+    "table": "301",
+    "playerA": "Janoš Nuck",
+    "playerB": "Paul Weißbach",
+    "exportedTarget": 40,
+    "actualTarget": null,
+    "actualTargetSource": null,
+    "pointsA": 29,
+    "pointsB": 40,
+    "innings": 5,
+    "highRunA": 14,
+    "highRunB": 21,
+    "gdA": 5.8,
+    "gdB": 8,
+    "matchPointsA": 0,
+    "matchPointsB": 1,
+    "historicalPerfA": 1710,
+    "historicalPerfB": 1824,
+    "historicalGbrA": {
+      "before": 1756,
+      "change": -16,
+      "after": 1740
+    },
+    "historicalGbrB": {
+      "before": 1778,
+      "change": 16,
+      "after": 1794
+    }
+  },
+  {
+    "round": 3,
+    "table": "304",
+    "playerA": "Leonid Potapov",
+    "playerB": "Quang Anh Tran",
+    "exportedTarget": 40,
+    "actualTarget": null,
+    "actualTargetSource": null,
+    "pointsA": 33,
+    "pointsB": 24,
+    "innings": 20,
+    "highRunA": 8,
+    "highRunB": 6,
+    "gdA": 1.65,
+    "gdB": 1.2,
+    "matchPointsA": 1,
+    "matchPointsB": 0,
+    "historicalPerfA": 1622,
+    "historicalPerfB": 1620,
+    "historicalGbrA": {
+      "before": 1677,
+      "change": 7,
+      "after": 1684
+    },
+    "historicalGbrB": {
+      "before": 1565,
+      "change": -7,
+      "after": 1558
+    }
+  },
+  {
+    "round": 3,
+    "table": "303",
+    "playerA": "Paul Samuel Heim",
+    "playerB": "Carsten Gäbler",
+    "exportedTarget": 40,
+    "actualTarget": null,
+    "actualTargetSource": null,
+    "pointsA": 33,
+    "pointsB": 40,
+    "innings": 11,
+    "highRunA": 10,
+    "highRunB": 11,
+    "gdA": 3,
+    "gdB": 3.64,
+    "matchPointsA": 0,
+    "matchPointsB": 1,
+    "historicalPerfA": 1624,
+    "historicalPerfB": 1744,
+    "historicalGbrA": {
+      "before": 1704,
+      "change": -20,
+      "after": 1683
+    },
+    "historicalGbrB": {
+      "before": 1664,
+      "change": 20,
+      "after": 1684
+    }
+  },
+  {
+    "round": 3,
+    "table": "302",
+    "playerA": "Stefan Loreck",
+    "playerB": "Richard Juros",
+    "exportedTarget": 30,
+    "actualTarget": null,
+    "actualTargetSource": null,
+    "pointsA": 12,
+    "pointsB": 30,
+    "innings": 11,
+    "highRunA": 2,
+    "highRunB": 9,
+    "gdA": 1.09,
+    "gdB": 2.73,
+    "matchPointsA": 0,
+    "matchPointsB": 1,
+    "historicalPerfA": 1604,
+    "historicalPerfB": 1764,
+    "historicalGbrA": {
+      "before": 1586,
+      "change": -6,
+      "after": 1580
+    },
+    "historicalGbrB": {
+      "before": 1782,
+      "change": 6,
+      "after": 1787
+    }
+  },
+  {
+    "round": 3,
+    "table": "201",
+    "playerA": "Henry Heim",
+    "playerB": "Henry Zieger",
+    "exportedTarget": 20,
+    "actualTarget": null,
+    "actualTargetSource": null,
+    "pointsA": 6,
+    "pointsB": 30,
+    "innings": 12,
+    "highRunA": 3,
+    "highRunB": 10,
+    "gdA": 0.5,
+    "gdB": 2.5,
+    "matchPointsA": 0,
+    "matchPointsB": 1,
+    "historicalPerfA": 1113,
+    "historicalPerfB": 1778,
+    "historicalGbrA": {
+      "before": 1414,
+      "change": -17,
+      "after": 1397
+    },
+    "historicalGbrB": {
+      "before": 1477,
+      "change": 17,
+      "after": 1494
+    }
+  },
+  {
+    "round": 4,
+    "table": "304",
+    "playerA": "Paul Weißbach",
+    "playerB": "Leonid Potapov",
+    "exportedTarget": 40,
+    "actualTarget": null,
+    "actualTargetSource": null,
+    "pointsA": 40,
+    "pointsB": 17,
+    "innings": 9,
+    "highRunA": 15,
+    "highRunB": 10,
+    "gdA": 4.44,
+    "gdB": 1.89,
+    "matchPointsA": 1,
+    "matchPointsB": 0,
+    "historicalPerfA": 1837,
+    "historicalPerfB": 1642,
+    "historicalGbrA": {
+      "before": 1794,
+      "change": 11,
+      "after": 1805
+    },
+    "historicalGbrB": {
+      "before": 1684,
+      "change": -11,
+      "after": 1673
+    }
+  },
+  {
+    "round": 4,
+    "table": "302",
+    "playerA": "Janoš Nuck",
+    "playerB": "Carsten Gäbler",
+    "exportedTarget": 40,
+    "actualTarget": null,
+    "actualTargetSource": null,
+    "pointsA": 40,
+    "pointsB": 25,
+    "innings": 15,
+    "highRunA": 14,
+    "highRunB": 5,
+    "gdA": 2.67,
+    "gdB": 1.67,
+    "matchPointsA": 1,
+    "matchPointsB": 0,
+    "historicalPerfA": 1786,
+    "historicalPerfB": 1638,
+    "historicalGbrA": {
+      "before": 1740,
+      "change": 14,
+      "after": 1754
+    },
+    "historicalGbrB": {
+      "before": 1684,
+      "change": -14,
+      "after": 1671
+    }
+  },
+  {
+    "round": 4,
+    "table": "303",
+    "playerA": "Richard Juros",
+    "playerB": "Paul Samuel Heim",
+    "exportedTarget": 30,
+    "actualTarget": null,
+    "actualTargetSource": null,
+    "pointsA": 30,
+    "pointsB": 17,
+    "innings": 8,
+    "highRunA": 8,
+    "highRunB": 7,
+    "gdA": 3.75,
+    "gdB": 2.13,
+    "matchPointsA": 1,
+    "matchPointsB": 0,
+    "historicalPerfA": 1788,
+    "historicalPerfB": 1683,
+    "historicalGbrA": {
+      "before": 1787,
+      "change": 10,
+      "after": 1797
+    },
+    "historicalGbrB": {
+      "before": 1683,
+      "change": -10,
+      "after": 1674
+    }
+  },
+  {
+    "round": 4,
+    "table": "301",
+    "playerA": "Quang Anh Tran",
+    "playerB": "Henry Zieger",
+    "exportedTarget": 30,
+    "actualTarget": null,
+    "actualTargetSource": null,
+    "pointsA": 16,
+    "pointsB": 30,
+    "innings": 18,
+    "highRunA": 6,
+    "highRunB": 7,
+    "gdA": 0.89,
+    "gdB": 1.67,
+    "matchPointsA": 0,
+    "matchPointsB": 1,
+    "historicalPerfA": 1379,
+    "historicalPerfB": 1672,
+    "historicalGbrA": {
+      "before": 1558,
+      "change": -24,
+      "after": 1534
+    },
+    "historicalGbrB": {
+      "before": 1494,
+      "change": 24,
+      "after": 1518
+    }
+  },
+  {
+    "round": 4,
+    "table": "201",
+    "playerA": "Stefan Loreck",
+    "playerB": "Henry Heim",
+    "exportedTarget": 20,
+    "actualTarget": null,
+    "actualTargetSource": null,
+    "pointsA": 30,
+    "pointsB": 6,
+    "innings": 14,
+    "highRunA": 9,
+    "highRunB": 2,
+    "gdA": 2.14,
+    "gdB": 0.43,
+    "matchPointsA": 1,
+    "matchPointsB": 0,
+    "historicalPerfA": 1772,
+    "historicalPerfB": 1205,
+    "historicalGbrA": {
+      "before": 1580,
+      "change": 9,
+      "after": 1589
+    },
+    "historicalGbrB": {
+      "before": 1397,
+      "change": -9,
+      "after": 1388
+    }
+  },
+  {
+    "round": 5,
+    "table": "303",
+    "playerA": "Paul Weißbach",
+    "playerB": "Richard Juros",
+    "exportedTarget": 40,
+    "actualTarget": null,
+    "actualTargetSource": null,
+    "pointsA": 36,
+    "pointsB": 40,
+    "innings": 12,
+    "highRunA": 27,
+    "highRunB": 8,
+    "gdA": 3,
+    "gdB": 3.33,
+    "matchPointsA": 0,
+    "matchPointsB": 1,
+    "historicalPerfA": 1791,
+    "historicalPerfB": 1811,
+    "historicalGbrA": {
+      "before": 1805,
+      "change": -16,
+      "after": 1789
+    },
+    "historicalGbrB": {
+      "before": 1797,
+      "change": 16,
+      "after": 1813
+    }
+  },
+  {
+    "round": 5,
+    "table": "304",
+    "playerA": "Janoš Nuck",
+    "playerB": "Leonid Potapov",
+    "exportedTarget": 40,
+    "actualTarget": null,
+    "actualTargetSource": null,
+    "pointsA": 40,
+    "pointsB": 25,
+    "innings": 13,
+    "highRunA": 23,
+    "highRunB": 11,
+    "gdA": 3.08,
+    "gdB": 1.92,
+    "matchPointsA": 1,
+    "matchPointsB": 0,
+    "historicalPerfA": 1772,
+    "historicalPerfB": 1656,
+    "historicalGbrA": {
+      "before": 1754,
+      "change": 12,
+      "after": 1766
+    },
+    "historicalGbrB": {
+      "before": 1673,
+      "change": -12,
+      "after": 1662
+    }
+  },
+  {
+    "round": 5,
+    "table": "302",
+    "playerA": "Stefan Loreck",
+    "playerB": "Henry Zieger",
+    "exportedTarget": 30,
+    "actualTarget": null,
+    "actualTargetSource": null,
+    "pointsA": 33,
+    "pointsB": 9,
+    "innings": 20,
+    "highRunA": 8,
+    "highRunB": 5,
+    "gdA": 1.65,
+    "gdB": 0.45,
+    "matchPointsA": 1,
+    "matchPointsB": 0,
+    "historicalPerfA": 1753,
+    "historicalPerfB": 1354,
+    "historicalGbrA": {
+      "before": 1589,
+      "change": 16,
+      "after": 1605
+    },
+    "historicalGbrB": {
+      "before": 1518,
+      "change": -16,
+      "after": 1502
+    }
+  },
+  {
+    "round": 5,
+    "table": "301",
+    "playerA": "Carsten Gäbler",
+    "playerB": "Quang Anh Tran",
+    "exportedTarget": 20,
+    "actualTarget": null,
+    "actualTargetSource": null,
+    "pointsA": 40,
+    "pointsB": 19,
+    "innings": 14,
+    "highRunA": 13,
+    "highRunB": 5,
+    "gdA": 2.86,
+    "gdB": 1.36,
+    "matchPointsA": 1,
+    "matchPointsB": 0,
+    "historicalPerfA": 1813,
+    "historicalPerfB": 1391,
+    "historicalGbrA": {
+      "before": 1671,
+      "change": 11,
+      "after": 1681
+    },
+    "historicalGbrB": {
+      "before": 1534,
+      "change": -11,
+      "after": 1523
+    }
+  }
+]

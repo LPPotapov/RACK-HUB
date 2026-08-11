@@ -6,6 +6,18 @@ The highest-risk failure in RACK HUB is not a visual bug. It is silently changin
 
 Testing therefore begins with behavioral reproduction before large refactoring.
 
+## CURRENT — Normalized historical evidence
+
+The original historical CSV exports remain unchanged under `legacy/`. Normalized,
+machine-readable copies are stored under `tests/fixtures/historical/`, separated by
+tournament. Data-integrity tests verify that normalization preserves basic exported
+invariants and representative source values.
+
+These fixtures are compatibility/reference evidence, not engine golden masters. The
+14.1 data comes from an experimental legacy implementation, while the surviving
+9-ball and 10-ball exports contain final tables only. Engine replay, numerical
+tolerances, and historical-version reconciliation remain later M1 work.
+
 ## M1 — Reference tournament / golden master
 
 A completed historical tournament will become the permanent baseline fixture.

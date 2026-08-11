@@ -1,0 +1,18 @@
+{
+  "tournamentName": "9-Ball VM 2026 - Part 1",
+  "date": "2026-04-13",
+  "discipline": "9Ball",
+  "sourceCsv": "legacy/reference_vm_joes_9ball_1.csv",
+  "sourceFrontendVersion": "unknown",
+  "historicalDataConfidence": "Final-table evidence only; no individual match history survives.",
+  "playerCount": 22,
+  "roundCount": 4,
+  "matchHistoryComplete": false,
+  "knownLimitations": ["No opponents or match scores survive.", "A '-' round marker is not interpreted as a bye.", "Race length and pairing history are unknown."],
+  "knownConfigurationUncertainty": ["Exact frontend revision and calculation configuration are unknown."],
+  "fieldClassification": {
+    "EXACT": ["identity", "placement", "round markers", "MP", "Prestige", "Event Score", "games", "racks won/lost", "rack differential"],
+    "COMPATIBILITY": ["average PERF", "starting GBR/ELO", "final GBR/ELO", "GBR/ELO change"],
+    "NOT_TESTABLE": ["individual matches", "opponents", "byes", "race length", "pairings", "per-match GBR/PERF", "historical replay"]
+  }
+}

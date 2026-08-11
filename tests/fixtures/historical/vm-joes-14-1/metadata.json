@@ -1,0 +1,41 @@
+{
+  "tournamentName": "14.1 VM 2026",
+  "date": "2026-06-27",
+  "discipline": "14.1",
+  "format": "Straight Pool 14.1 — GBR_14.1 Experimental",
+  "sourceCsv": "legacy/reference_vm_joes_14_1.csv",
+  "sourceFrontendVersion": "unknown",
+  "historicalDataConfidence": "Complete recorded match section and final table survive; calculated values remain compatibility evidence because the exact frontend/configuration revision is unknown.",
+  "playerCount": 10,
+  "roundCount": 5,
+  "recordedMatchCount": 24,
+  "matchHistoryComplete": true,
+  "matchTerminationRule": "A match could end when the assigned target was reached or when the 20-inning cap was reached.",
+  "exportedConfiguration": {
+    "round1Target": 30,
+    "tierTargets": [40, 30, 20],
+    "tieringStartsRound": 2,
+    "k14_1": 20,
+    "weights": { "margin": 60, "gd": 30, "highRun": 10 },
+    "rankingSystem": "Point Differential 14.1 (MP -> Point Diff -> 14.1 PERF -> GD -> HS)",
+    "prestigeScoreEnabled": true,
+    "eventScoreEnabled": false
+  },
+  "knownLimitations": [
+    "The exact legacy frontend revision is unknown.",
+    "Exported target values are preserved and may not represent the effective target used during play.",
+    "A score exceeding exportedTarget is not treated as evidence that the CSV is wrong because the 20-inning termination rule also applied.",
+    "Two players have no Round 5 result and the surviving data does not explain why.",
+    "No tournament-director-confirmed actual target overrides were supplied."
+  ],
+  "knownConfigurationUncertainty": [
+    "Exact d and match-component K values are not exported.",
+    "Target-scaling details and any mid-event configuration changes are not fully preserved.",
+    "Player IDs, registration order, seeding method, and manual interventions are not preserved."
+  ],
+  "fieldClassification": {
+    "EXACT": ["identity", "placement", "round markers", "recorded pairings and order", "tables", "exported targets", "points", "innings", "high runs", "exported GD", "exported MP", "aggregate point statistics"],
+    "COMPATIBILITY": ["historical per-match PERF", "historical final PERF", "historical GBR before/change/after", "historical final GBR"],
+    "NOT_TESTABLE": ["automatic pairing reproduction", "effective target where not director-confirmed", "exact legacy formula/configuration reproduction"]
+  }
+}
