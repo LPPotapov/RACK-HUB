@@ -12,7 +12,7 @@ It is deliberately separate from the **Batforce Billiards System (BBS)**:
 **CURRENT milestone:** M2 — Frontend / Backend / Engine Separation  
 **Status:** IN PROGRESS
 
-M1 — BBS Baseline Reproduction is **complete**: stable fixed-rack BBS behavior (expected score, GBR, PERF, match points, standings, pairing, byes, recalculation) is covered by an automated regression suite extracted into `src/fixedRackBbs.js`, alongside preserved and normalized historical tournament evidence.
+M1 — BBS Baseline Reproduction is **complete**: stable fixed-rack BBS behavior (expected score, GBR, PERF, match points, standings, pairing, byes, recalculation) is covered by an automated regression suite extracted into `src/domain/fixedRackBbs.js`, alongside preserved and normalized historical tournament evidence.
 
 Current objective: separate the BBS/domain engine, backend, and frontend into clean architectural boundaries while preserving the M1 regression baseline.
 

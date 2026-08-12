@@ -13,7 +13,7 @@ import {
   getStraightPoolTargetForMatch,
   isStraightPool,
   normalizeWeights
-} from '../src/straightPool14_1.js';
+} from '../src/domain/straightPool14_1.js';
 
 const d = 330, k_m = 30;
 const closeTo = (actual, expected, epsilon = 1e-9) => assert.ok(Math.abs(actual - expected) < epsilon, `${actual} != ${expected}`);

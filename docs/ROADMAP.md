@@ -96,7 +96,7 @@ replay:
   manual 14.1 compatibility validation;
 - stable fixed-rack BBS logic (expected score, GBR, PERF, match points, standings,
   standard pairing, byes, recalculation) extracted into a small pure-function
-  module (`src/fixedRackBbs.js`), covered by focused automated tests and a
+  module (`src/domain/fixedRackBbs.js`), covered by focused automated tests and a
   deterministic synthetic replay fixture, and independently reviewed by a second
   agent;
 - Classic standings corrected to the whitepaper rule (`MP -> PERF -> ID`); Rack

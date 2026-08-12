@@ -14,7 +14,7 @@ import {
   performanceGbr,
   replayFixedRackHistory,
   selectEligibleBye
-} from '../src/fixedRackBbs.js';
+} from '../src/domain/fixedRackBbs.js';
 
 const config = { d: 330, k_m: 30, k_r: 20 };
 const closeTo = (actual, expected, epsilon = 1e-12) => assert.ok(Math.abs(actual - expected) < epsilon, `${actual} != ${expected}`);

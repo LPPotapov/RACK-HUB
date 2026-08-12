@@ -1,5 +1,5 @@
 // EXPERIMENTAL: GBR_14.1 straight-pool signal/rating model, not calibrated.
-// Isolated from stable fixed-rack BBS behavior (src/fixedRackBbs.js).
+// Isolated from stable fixed-rack BBS behavior (src/domain/fixedRackBbs.js).
 // Formulas are unchanged from the pre-extraction PoolTournamentApp.jsx
 // implementation; only the config/closure inputs were made explicit.
 import { expectedScore } from './fixedRackBbs.js';

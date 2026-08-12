@@ -331,7 +331,7 @@ import {
   pairingCost,
   performanceGbr,
   selectEligibleBye
-} from './fixedRackBbs.js';
+} from './domain/fixedRackBbs.js';
 import {
   STRAIGHT_POOL_DEFAULTS,
   calcNPD,
@@ -344,7 +344,7 @@ import {
   getSP as getStraightPoolConfig,
   getStraightPoolTargetForMatch as getStraightPoolTargetForMatchPure,
   isStraightPool as isStraightPoolFormat
-} from './straightPool14_1.js';
+} from './domain/straightPool14_1.js';
 
 const PoolTournamentApp = () => {
   // Configuration and state
@@ -452,7 +452,7 @@ const PoolTournamentApp = () => {
   // v1.92: GBR_14.1 EXPERIMENTAL (straight pool) helpers
   // EXPERIMENTAL: this is a 14.1-specific signal/rating model, not calibrated.
   // Fixed-rack GBR behavior is unchanged and used whenever format !== 14.1.
-  // Pure math/config resolution now lives in src/straightPool14_1.js (M2B).
+  // Pure math/config resolution now lives in src/domain/straightPool14_1.js (M2B).
   // These are thin closures that resolve the component's config into the
   // pure functions' explicit arguments, preserving every existing call site.
   // ===================================================================
