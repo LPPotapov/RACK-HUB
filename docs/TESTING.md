@@ -34,7 +34,22 @@ player ID. Rack Differential standings are unchanged (`MP -> Rack Differential -
 PERF -> ID`).
 
 Together with the normalized historical fixtures above, this is the M1 baseline
-regression suite: `npm test` passes 11/11 and `npm run build` passes.
+regression suite.
+
+## CURRENT — Experimental 14.1 characterization
+
+The GBR_14.1 experimental straight-pool calculation cluster (signal construction,
+14.1 PERF, 14.1 GBR change, point-differential normalization, race-target tiering,
+and 14.1 standings order) has direct unit characterization tests and a pure module
+seam, mirroring the stable fixed-rack safety net above. These tests characterize
+current behavior — including existing fallback/default quirks such as the
+floating-point difference between "weights omitted" and "explicit default weights"
+in weight normalization — rather than asserting a preferred/corrected formula.
+Experimental 14.1 logic remains isolated from stable fixed-rack behavior and is not
+part of the M1 baseline.
+
+`npm test` currently passes 43/43 (11 M1 fixed-rack/historical + 32 14.1
+characterization) and `npm run build` passes.
 
 ## FUTURE — Reference tournament / golden master
 
