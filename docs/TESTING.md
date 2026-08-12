@@ -58,16 +58,22 @@ orchestration (player lookup vs. dict-based standings reconstruction, the
 absent-historical-opponent snapshot-GBR fallback, RP accrual, opponent-history
 bookkeeping) is untouched and stays outside the domain layer.
 
-Known test gap: the snapshot-GBR fallback in `buildStandingsBeforeRound()` (used
-when a withdrawn/removed player is absent from the reconstructed standings but
-their historical opponent must still be scored) is not covered by an automated
-test, for either format. The function is a private closure inside the React
-component with no exported/importable surface, and this repo intentionally has
-no React component test harness. The underlying match-outcome math this fallback
-feeds is fully covered; only the orchestration ternary that selects it is
-untested.
+The former `buildStandingsBeforeRound()` reconstruction algorithm — used to
+prepare pairing input for a not-yet-generated round — is now
+`reconstructStandingsBeforeRound()` in `src/domain/beforeRoundStandings.js`,
+an exported pure function taking the tournament roster, a separate
+starting-GBR source roster, round history, and config explicitly. Direct tests
+cover: multi-round replay order, the snapshot-GBR fallback for a
+withdrawn/removed historical opponent (for both fixed-rack and 14.1),
+`joinedRound` eligibility, cancelled/incomplete-match exclusion, both legacy
+bye encodings, fixed-rack/14.1 format isolation, the absence of RP/Prestige
+tracking, starting-GBR source precedence over a player's own stale `elo`
+field, and that a player's second match in the same replay uses the GBR their
+first match produced (not a re-read of the starting source). `PoolTournamentApp.jsx`
+now retains only a thin wrapper that resolves its own component state into
+these explicit inputs.
 
-`npm test` currently passes 55/55 and `npm run build` passes.
+`npm test` currently passes 65/65 and `npm run build` passes.
 
 ## FUTURE — Reference tournament / golden master
 

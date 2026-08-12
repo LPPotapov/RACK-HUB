@@ -327,7 +327,6 @@ import {
   compareFixedRackPairingOrder,
   compareFixedRackStandings,
   expectedScore,
-  fixedRackMatchOutcome,
   gbrChange,
   pairingCost,
   performanceGbr,
@@ -347,6 +346,7 @@ import {
   getStraightPoolTargetForMatch as getStraightPoolTargetForMatchPure,
   isStraightPool as isStraightPoolFormat
 } from './domain/straightPool14_1.js';
+import { reconstructStandingsBeforeRound } from './domain/beforeRoundStandings.js';
 
 const PoolTournamentApp = () => {
   // Configuration and state
@@ -480,97 +480,19 @@ const PoolTournamentApp = () => {
     setShowDeleteConfirm(true);
   };
 
-  // Execute player deletion (called after confirmation)
-  // Reconstruct each player's standings as of BEFORE `roundLimit` — i.e. through all
-  // completed matches in rounds strictly < roundLimit — mirroring recalc()'s logic
-  // for BOTH fixed-rack and GBR_14.1 modes. Returns a map keyed by player id.
-  // Used by every current-round regeneration path so the list handed to
-  // createPairings() is complete and correctly ordered (so the bye lands right).
-  const buildStandingsBeforeRound = (roundLimit, basePlayers, roundsData) => {
-    const standings = {};
-    basePlayers
-      .filter(p => !p.removed && (p.joinedRound || 1) <= roundLimit)
-      .forEach(p => {
-        const startElo = players.find(pl => pl.id === p.id)?.elo || p.elo;
-        standings[p.id] = {
-          ...p,
-          mp: 0, perf: 0, perfCount: 0, elo: startElo, games: 0,
-          racksWon: 0, racksLost: 0, opps: [],
-          pointsFor: 0, pointsAgainst: 0, inningsTotal: 0, npd: 0, hs: 0, hgd: 0
-        };
-      });
-
-    for (let r = 1; r < roundLimit; r++) {
-      (roundsData[r] || []).forEach(m => {
-        if (!m.done || m.cancelled) return;
-        const p1Data = standings[m.p1.id];
-        const p2Data = standings[m.p2.id];
-
-        // ---- GBR_14.1 experimental match: canonical domain formula (same
-        // straightPoolMatchOutcome used by recalc()'s 14.1 branch); the absent-
-        // opponent snapshot fallback (g1/g2) and dict-based accumulation stay
-        // here, unchanged, same as the fixed-rack branch above. ----
-        if (m.format === 'straight_pool_14_1' && !m.bye) {
-          const PA = Number(m.p1Points) || 0, PB = Number(m.p2Points) || 0;
-          const inn = Number(m.innings) || 0;
-          const HRA = Number(m.p1HighRun) || 0, HRB = Number(m.p2HighRun) || 0;
-          const g1 = p1Data ? p1Data.elo : m.p1.elo;
-          const g2 = p2Data ? p2Data.elo : m.p2.elo;
-          const outcome = straightPoolMatchOutcome(g1, g2, {
-            p1Points: PA, p2Points: PB, innings: inn, p1HighRun: HRA, p2HighRun: HRB, target: m.target
-          }, { d: config.d, k_m: config.k_m, sp: getSP() });
-          if (p1Data) {
-            p1Data.mp += outcome.mpA;
-            p1Data.games++; p1Data.elo += outcome.change;
-            p1Data.perf += outcome.perfA; p1Data.perfCount++;
-            p1Data.pointsFor += PA; p1Data.pointsAgainst += PB; p1Data.inningsTotal += inn;
-            p1Data.npd += outcome.npdA; p1Data.hs = Math.max(p1Data.hs, HRA);
-            p1Data.hgd = Math.max(p1Data.hgd, outcome.gdA);
-            if (p2Data && !p1Data.opps.includes(m.p2.id)) p1Data.opps.push(m.p2.id);
-          }
-          if (p2Data) {
-            p2Data.mp += outcome.mpB;
-            p2Data.games++; p2Data.elo -= outcome.change;
-            p2Data.perf += outcome.perfB; p2Data.perfCount++;
-            p2Data.pointsFor += PB; p2Data.pointsAgainst += PA; p2Data.inningsTotal += inn;
-            p2Data.npd += outcome.npdB; p2Data.hs = Math.max(p2Data.hs, HRB);
-            p2Data.hgd = Math.max(p2Data.hgd, outcome.gdB);
-            if (p1Data && !p2Data.opps.includes(m.p1.id)) p2Data.opps.push(m.p1.id);
-          }
-          return;
-        }
-
-        // ---- Bye ----
-        if (m.bye) {
-          if (p1Data) { p1Data.mp += 1; p1Data.games++; } // bye = +1 MP, no other stats
-          return;
-        }
-
-        // ---- Fixed-rack match: canonical domain formula (src/domain/fixedRackBbs.js),
-        // applied here rather than via applyFixedRackMatch()'s array lookup, since a
-        // removed/not-yet-active player may be absent from `standings` while their
-        // opponent still needs that player's match-stored GBR as the pre-match snapshot.
-        const g1 = p1Data ? p1Data.elo : m.p1.elo;
-        const g2 = p2Data ? p2Data.elo : m.p2.elo;
-        const outcome = fixedRackMatchOutcome(m.r1, m.r2, g1, g2, config);
-        if (p1Data) {
-          p1Data.mp += outcome.mpA;
-          p1Data.games++; p1Data.elo += outcome.change;
-          p1Data.perf += outcome.perfA; p1Data.perfCount++;
-          p1Data.racksWon += m.r1; p1Data.racksLost += m.r2;
-          if (p2Data && !p1Data.opps.includes(m.p2.id)) p1Data.opps.push(m.p2.id);
-        }
-        if (p2Data) {
-          p2Data.mp += outcome.mpB;
-          p2Data.games++; p2Data.elo -= outcome.change;
-          p2Data.perf += outcome.perfB; p2Data.perfCount++;
-          p2Data.racksWon += m.r2; p2Data.racksLost += m.r1;
-          if (p1Data && !p2Data.opps.includes(m.p1.id)) p2Data.opps.push(m.p1.id);
-        }
-      });
-    }
-    return standings;
-  };
+  // Reconstruct format-aware player state as of strictly before `roundLimit`,
+  // for pairing preparation. Core reconstruction (filtering, absent-opponent
+  // GBR-snapshot fallback, fixed-rack/14.1 domain calculation) now lives in
+  // src/domain/beforeRoundStandings.js; this just passes the component's
+  // `players` roster through as the starting-GBR source, unchanged.
+  const buildStandingsBeforeRound = (roundLimit, basePlayers, roundsData) =>
+    reconstructStandingsBeforeRound({
+      players: basePlayers,
+      startingRoster: players,
+      rounds: roundsData,
+      roundLimit,
+      config
+    });
 
   // Build the complete, format-aware, sorted pairing list as of before `roundLimit`.
   const buildSortedStandingsBeforeRound = (roundLimit, basePlayers, roundsData) => {
