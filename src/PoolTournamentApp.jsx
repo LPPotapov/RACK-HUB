@@ -327,6 +327,7 @@ import {
   compareFixedRackPairingOrder,
   compareFixedRackStandings,
   expectedScore,
+  fixedRackMatchOutcome,
   gbrChange,
   pairingCost,
   performanceGbr,
@@ -542,21 +543,24 @@ const PoolTournamentApp = () => {
           return;
         }
 
-        // ---- Fixed-rack match (both changes computed from the same pre-match snapshot) ----
+        // ---- Fixed-rack match: canonical domain formula (src/domain/fixedRackBbs.js),
+        // applied here rather than via applyFixedRackMatch()'s array lookup, since a
+        // removed/not-yet-active player may be absent from `standings` while their
+        // opponent still needs that player's match-stored GBR as the pre-match snapshot.
         const g1 = p1Data ? p1Data.elo : m.p1.elo;
         const g2 = p2Data ? p2Data.elo : m.p2.elo;
-        const eloChange = calcEloChange(g1, g2, m.r1, m.r2);
+        const outcome = fixedRackMatchOutcome(m.r1, m.r2, g1, g2, config);
         if (p1Data) {
-          p1Data.mp += m.r1 > m.r2 ? 1 : m.r1 === m.r2 ? 0.5 : 0;
-          p1Data.games++; p1Data.elo += eloChange;
-          p1Data.perf += calcPerformanceElo(g2, m.r1, m.r2); p1Data.perfCount++;
+          p1Data.mp += outcome.mpA;
+          p1Data.games++; p1Data.elo += outcome.change;
+          p1Data.perf += outcome.perfA; p1Data.perfCount++;
           p1Data.racksWon += m.r1; p1Data.racksLost += m.r2;
           if (p2Data && !p1Data.opps.includes(m.p2.id)) p1Data.opps.push(m.p2.id);
         }
         if (p2Data) {
-          p2Data.mp += m.r2 > m.r1 ? 1 : m.r2 === m.r1 ? 0.5 : 0;
-          p2Data.games++; p2Data.elo -= eloChange;
-          p2Data.perf += calcPerformanceElo(g1, m.r2, m.r1); p2Data.perfCount++;
+          p2Data.mp += outcome.mpB;
+          p2Data.games++; p2Data.elo -= outcome.change;
+          p2Data.perf += outcome.perfB; p2Data.perfCount++;
           p2Data.racksWon += m.r2; p2Data.racksLost += m.r1;
           if (p1Data && !p2Data.opps.includes(m.p1.id)) p2Data.opps.push(m.p1.id);
         }

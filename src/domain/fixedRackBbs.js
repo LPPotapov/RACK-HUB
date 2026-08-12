@@ -73,6 +73,19 @@ export const initialReplayPlayer = (player, startingGbr = player.elo) => ({
   opps: [], rp: 0, racksWon: 0, racksLost: 0
 });
 
+// Outcome of a single non-bye fixed-rack match given already-known pre-match
+// GBR values, with no player-array lookup/mutation. This is the canonical
+// fixed-rack match formula, shared by applyFixedRackMatch (array-based
+// replay) and by callers that already resolve pre-match GBR snapshots
+// themselves, such as PoolTournamentApp's before-round standings rebuild.
+export const fixedRackMatchOutcome = (racksA, racksB, gbrA, gbrB, config) => ({
+  mpA: matchPoints(racksA, racksB),
+  mpB: matchPoints(racksB, racksA),
+  change: gbrChange(gbrA, gbrB, racksA, racksB, config),
+  perfA: performanceGbr(gbrB, racksA, racksB, config.d),
+  perfB: performanceGbr(gbrA, racksB, racksA, config.d)
+});
+
 export const applyFixedRackMatch = (players, match, config, calculatePrestige = () => 0) => {
   if (!match.done || match.cancelled) return players;
   const mpA = matchPoints(match.r1, match.r2, match.bye);
@@ -86,10 +99,7 @@ export const applyFixedRackMatch = (players, match, config, calculatePrestige = 
   const playerB = players.find((p) => p.id === match.p2.id);
   const beforeA = playerA.elo;
   const beforeB = playerB.elo;
-  const change = gbrChange(beforeA, beforeB, match.r1, match.r2, config);
-  const perfA = performanceGbr(beforeB, match.r1, match.r2, config.d);
-  const perfB = performanceGbr(beforeA, match.r2, match.r1, config.d);
-  const mpB = matchPoints(match.r2, match.r1);
+  const { mpB, change, perfA, perfB } = fixedRackMatchOutcome(match.r1, match.r2, beforeA, beforeB, config);
   const rpA = calculatePrestige(mpA, change);
   const rpB = calculatePrestige(mpB, -change);
   return players.map((p) => {
