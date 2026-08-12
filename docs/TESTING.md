@@ -48,8 +48,26 @@ in weight normalization — rather than asserting a preferred/corrected formula.
 Experimental 14.1 logic remains isolated from stable fixed-rack behavior and is not
 part of the M1 baseline.
 
-`npm test` currently passes 43/43 (11 M1 fixed-rack/historical + 32 14.1
-characterization) and `npm run build` passes.
+Both `src/domain/fixedRackBbs.js` (`fixedRackMatchOutcome`) and
+`src/domain/straightPool14_1.js` (`straightPoolMatchOutcome`) now expose a single
+pure "given two pre-match GBR values and one completed match, what is the
+numerical outcome" primitive per format. `PoolTournamentApp.jsx`'s `recalc()` and
+`buildStandingsBeforeRound()` both call these instead of independently
+recalculating signals/PERF/GBR-change/NPD/GD inline; each function's own
+orchestration (player lookup vs. dict-based standings reconstruction, the
+absent-historical-opponent snapshot-GBR fallback, RP accrual, opponent-history
+bookkeeping) is untouched and stays outside the domain layer.
+
+Known test gap: the snapshot-GBR fallback in `buildStandingsBeforeRound()` (used
+when a withdrawn/removed player is absent from the reconstructed standings but
+their historical opponent must still be scored) is not covered by an automated
+test, for either format. The function is a private closure inside the React
+component with no exported/importable surface, and this repo intentionally has
+no React component test harness. The underlying match-outcome math this fallback
+feeds is fully covered; only the orchestration ternary that selects it is
+untested.
+
+`npm test` currently passes 55/55 and `npm run build` passes.
 
 ## FUTURE — Reference tournament / golden master
 

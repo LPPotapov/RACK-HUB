@@ -338,6 +338,7 @@ import {
   calcNPD,
   calcStraightPoolSignals,
   normalizeWeights,
+  straightPoolMatchOutcome,
   assignStraightPoolTierTargets as assignStraightPoolTierTargetsPure,
   calcStraightPoolGbrChange as calcStraightPoolGbrChangePure,
   calcStraightPoolPerf as calcStraightPoolPerfPure,
@@ -505,33 +506,35 @@ const PoolTournamentApp = () => {
         const p1Data = standings[m.p1.id];
         const p2Data = standings[m.p2.id];
 
-        // ---- GBR_14.1 experimental match ----
+        // ---- GBR_14.1 experimental match: canonical domain formula (same
+        // straightPoolMatchOutcome used by recalc()'s 14.1 branch); the absent-
+        // opponent snapshot fallback (g1/g2) and dict-based accumulation stay
+        // here, unchanged, same as the fixed-rack branch above. ----
         if (m.format === 'straight_pool_14_1' && !m.bye) {
           const PA = Number(m.p1Points) || 0, PB = Number(m.p2Points) || 0;
           const inn = Number(m.innings) || 0;
           const HRA = Number(m.p1HighRun) || 0, HRB = Number(m.p2HighRun) || 0;
-          const tgt = m.target || getSP().startTarget;
           const g1 = p1Data ? p1Data.elo : m.p1.elo;
           const g2 = p2Data ? p2Data.elo : m.p2.elo;
-          const sigA = calcStraightPoolSignals(PA, PB, inn, HRA, HRB, tgt, getSP());
-          const sigB = calcStraightPoolSignals(PB, PA, inn, HRB, HRA, tgt, getSP());
-          const ch = calcStraightPoolGbrChange(g1, g2, { p1Points: PA, p2Points: PB, innings: inn, p1HighRun: HRA, p2HighRun: HRB, target: tgt });
+          const outcome = straightPoolMatchOutcome(g1, g2, {
+            p1Points: PA, p2Points: PB, innings: inn, p1HighRun: HRA, p2HighRun: HRB, target: m.target
+          }, { d: config.d, k_m: config.k_m, sp: getSP() });
           if (p1Data) {
-            p1Data.mp += PA > PB ? 1 : PA === PB ? 0.5 : 0;
-            p1Data.games++; p1Data.elo += ch;
-            p1Data.perf += calcStraightPoolPerf(g2, sigA.s141); p1Data.perfCount++;
+            p1Data.mp += outcome.mpA;
+            p1Data.games++; p1Data.elo += outcome.change;
+            p1Data.perf += outcome.perfA; p1Data.perfCount++;
             p1Data.pointsFor += PA; p1Data.pointsAgainst += PB; p1Data.inningsTotal += inn;
-            p1Data.npd += calcNPD(PA, PB, tgt); p1Data.hs = Math.max(p1Data.hs, HRA);
-            p1Data.hgd = Math.max(p1Data.hgd, inn > 0 ? PA / inn : 0);
+            p1Data.npd += outcome.npdA; p1Data.hs = Math.max(p1Data.hs, HRA);
+            p1Data.hgd = Math.max(p1Data.hgd, outcome.gdA);
             if (p2Data && !p1Data.opps.includes(m.p2.id)) p1Data.opps.push(m.p2.id);
           }
           if (p2Data) {
-            p2Data.mp += PB > PA ? 1 : PB === PA ? 0.5 : 0;
-            p2Data.games++; p2Data.elo -= ch;
-            p2Data.perf += calcStraightPoolPerf(g1, sigB.s141); p2Data.perfCount++;
+            p2Data.mp += outcome.mpB;
+            p2Data.games++; p2Data.elo -= outcome.change;
+            p2Data.perf += outcome.perfB; p2Data.perfCount++;
             p2Data.pointsFor += PB; p2Data.pointsAgainst += PA; p2Data.inningsTotal += inn;
-            p2Data.npd += calcNPD(PB, PA, tgt); p2Data.hs = Math.max(p2Data.hs, HRB);
-            p2Data.hgd = Math.max(p2Data.hgd, inn > 0 ? PB / inn : 0);
+            p2Data.npd += outcome.npdB; p2Data.hs = Math.max(p2Data.hs, HRB);
+            p2Data.hgd = Math.max(p2Data.hgd, outcome.gdB);
             if (p1Data && !p2Data.opps.includes(m.p1.id)) p2Data.opps.push(m.p1.id);
           }
           return;
@@ -1136,72 +1139,60 @@ const PoolTournamentApp = () => {
       const roundMatches = allRounds[round] || [];
       roundMatches.forEach(match => {
         if (match.done && !match.cancelled) {
-          // ---- v1.92: 14.1 experimental match accumulation ----
+          // ---- v1.92: 14.1 experimental match accumulation. Per-match calculation
+          // (signals/PERF/GBR-change/NPD/GD) is the canonical domain formula from
+          // src/domain/straightPool14_1.js; RP and running-max (hs/hgd) accumulation
+          // stay here, same as they're not part of the pure per-match outcome. ----
           if (match.format === 'straight_pool_14_1' && !match.bye) {
             const p1Cur = curr.find(p => p.id === match.p1.id);
             const p2Cur = curr.find(p => p.id === match.p2.id);
             const g1 = p1Cur.elo, g2 = p2Cur.elo;
-            const target = match.target || getSP().startTarget;
             const PA = Number(match.p1Points) || 0;
             const PB = Number(match.p2Points) || 0;
             const inn = Number(match.innings) || 0;
             const HRA = Number(match.p1HighRun) || 0;
             const HRB = Number(match.p2HighRun) || 0;
 
-            const spMp1 = PA > PB ? 1 : PA === PB ? 0.5 : 0;
-            const spMp2 = PB > PA ? 1 : PB === PA ? 0.5 : 0;
-
-            // Signals from each player's perspective
-            const sigA = calcStraightPoolSignals(PA, PB, inn, HRA, HRB, target, getSP());
-            const sigB = calcStraightPoolSignals(PB, PA, inn, HRB, HRA, target, getSP());
-            const perf1 = calcStraightPoolPerf(g2, sigA.s141);
-            const perf2 = calcStraightPoolPerf(g1, sigB.s141);
-
-            const gbrChange = calcStraightPoolGbrChange(g1, g2, {
+            const outcome = straightPoolMatchOutcome(g1, g2, {
               p1Points: PA, p2Points: PB, innings: inn,
-              p1HighRun: HRA, p2HighRun: HRB, target
-            });
+              p1HighRun: HRA, p2HighRun: HRB, target: match.target
+            }, { d: config.d, k_m: config.k_m, sp: getSP() });
 
-            const npd1 = calcNPD(PA, PB, target);
-            const npd2 = calcNPD(PB, PA, target);
-            const rp1 = calcRoundRP(spMp1, gbrChange);
-            const rp2 = calcRoundRP(spMp2, -gbrChange);
-            // Per-match GD (this round's balls-per-inning) for HGD (highest round GD)
-            const gd1 = inn > 0 ? PA / inn : 0;
-            const gd2 = inn > 0 ? PB / inn : 0;
+            const rp1 = calcRoundRP(outcome.mpA, outcome.change);
+            const rp2 = calcRoundRP(outcome.mpB, -outcome.change);
 
             curr = curr.map(p => {
               if (p.id === match.p1.id) return {
                 ...p,
-                mp: p.mp + spMp1,
-                perf: p.perf + perf1,
+                mp: p.mp + outcome.mpA,
+                perf: p.perf + outcome.perfA,
                 perfCount: p.perfCount + 1,
-                elo: p.elo + gbrChange,
+                elo: p.elo + outcome.change,
                 games: p.games + 1,
                 opps: p.opps.includes(match.p2.id) ? p.opps : [...p.opps, match.p2.id],
                 rp: p.rp + rp1,
                 pointsFor: p.pointsFor + PA,
                 pointsAgainst: p.pointsAgainst + PB,
                 inningsTotal: p.inningsTotal + inn,
-                npd: p.npd + npd1,
+                npd: p.npd + outcome.npdA,
                 hs: Math.max(p.hs, HRA),
-                hgd: Math.max(p.hgd, gd1)
+                hgd: Math.max(p.hgd, outcome.gdA)
               };
               if (p.id === match.p2.id) return {
                 ...p,
-                mp: p.mp + spMp2,
-                perf: p.perf + perf2,
+                mp: p.mp + outcome.mpB,
+                perf: p.perf + outcome.perfB,
                 perfCount: p.perfCount + 1,
-                elo: p.elo - gbrChange,
+                elo: p.elo - outcome.change,
                 games: p.games + 1,
                 opps: p.opps.includes(match.p1.id) ? p.opps : [...p.opps, match.p1.id],
                 rp: p.rp + rp2,
                 pointsFor: p.pointsFor + PB,
                 pointsAgainst: p.pointsAgainst + PA,
                 inningsTotal: p.inningsTotal + inn,
-                npd: p.npd + npd2,
+                npd: p.npd + outcome.npdB,
                 hs: Math.max(p.hs, HRB),
-                hgd: Math.max(p.hgd, gd2)
+                hgd: Math.max(p.hgd, outcome.gdB)
               };
               return p;
             });

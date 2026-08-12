@@ -118,6 +118,38 @@ export const getStraightPoolTargetForMatch = (p1, p2, tierMap, sp) => {
   return Math.max(t1, t2);
 };
 
+// Outcome of a single non-bye 14.1 match given already-known pre-match GBR
+// values, with no player-array lookup/mutation, no RP, and no opponent-history
+// bookkeeping. This is the canonical 14.1 match formula, shared by recalc()'s
+// array-based accumulation and by callers that already resolve pre-match GBR
+// snapshots themselves, such as PoolTournamentApp's before-round rebuild.
+// EXPERIMENTAL GBR_14.1 logic; formulas unchanged, only the calculation
+// shared between the two call sites.
+export const straightPoolMatchOutcome = (gbr1, gbr2, matchData, { d, k_m, sp }) => {
+  const target = matchData.target || sp.startTarget;
+  const PA = Number(matchData.p1Points) || 0, PB = Number(matchData.p2Points) || 0;
+  const inn = Number(matchData.innings) || 0;
+  const HRA = Number(matchData.p1HighRun) || 0, HRB = Number(matchData.p2HighRun) || 0;
+
+  const sigA = calcStraightPoolSignals(PA, PB, inn, HRA, HRB, target, sp);
+  const sigB = calcStraightPoolSignals(PB, PA, inn, HRB, HRA, target, sp);
+  const change = calcStraightPoolGbrChange(gbr1, gbr2, { p1Points: PA, p2Points: PB, innings: inn, p1HighRun: HRA, p2HighRun: HRB, target }, { d, k_m, sp });
+
+  return {
+    mpA: sigA.sMatch,
+    mpB: sigB.sMatch,
+    s141A: sigA.s141,
+    s141B: sigB.s141,
+    change,
+    perfA: calcStraightPoolPerf(gbr2, sigA.s141, d),
+    perfB: calcStraightPoolPerf(gbr1, sigB.s141, d),
+    npdA: calcNPD(PA, PB, target),
+    npdB: calcNPD(PB, PA, target),
+    gdA: inn > 0 ? PA / inn : 0,
+    gdB: inn > 0 ? PB / inn : 0
+  };
+};
+
 // Compare players for 14.1 final standings / pairing.
 // Classic 14.1:       MP -> 14.1 PERF -> Point Diff -> GD -> HS -> ID
 // Point Differential: MP -> Point Diff -> 14.1 PERF -> GD -> HS -> ID

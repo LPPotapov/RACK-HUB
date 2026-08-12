@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
   STRAIGHT_POOL_DEFAULTS,
@@ -12,7 +13,8 @@ import {
   getSP,
   getStraightPoolTargetForMatch,
   isStraightPool,
-  normalizeWeights
+  normalizeWeights,
+  straightPoolMatchOutcome
 } from '../src/domain/straightPool14_1.js';
 
 const d = 330, k_m = 30;
@@ -298,4 +300,102 @@ test('getSP: partial config is merged on top of defaults, not replacing them', (
   // untouched fields keep their defaults
   assert.equal(sp.useTargetScaledK, STRAIGHT_POOL_DEFAULTS.useTargetScaledK);
   assert.deepEqual(sp.tierTargets, STRAIGHT_POOL_DEFAULTS.tierTargets);
+});
+
+test('standings: compareStraightPool ignores player.npd and uses raw cumulative pointsFor - pointsAgainst', () => {
+  // Two players whose accumulated `npd` (target-normalized, written by calcNPD)
+  // strongly disagrees with their raw pointsFor/pointsAgainst point-diff ordering.
+  // If the comparator ever started reading `.npd` instead, this would flip.
+  const rawPdWinner = player({ id: 1, mp: 1, perf: 1600, perfCount: 1, pointsFor: 30, pointsAgainst: 10, npd: -5 });
+  const rawPdLoser = player({ id: 2, mp: 1, perf: 1600, perfCount: 1, pointsFor: 20, pointsAgainst: 15, npd: 5 });
+  assert.equal(compareStraightPool(rawPdWinner, rawPdLoser, 'racks') < 0, true); // racks: Point Diff is primary after MP
+  assert.equal(compareStraightPool(rawPdLoser, rawPdWinner, 'racks') > 0, true);
+});
+
+// ---------------------------------------------------------------------------
+// 8. straightPoolMatchOutcome (per-match domain primitive, no player lookup)
+// ---------------------------------------------------------------------------
+
+const spConfig = { d, k_m, sp: STRAIGHT_POOL_DEFAULTS };
+
+test('straightPoolMatchOutcome: a normal decisive match (equal-GBR baseline, target-scaled K)', () => {
+  const matchData = { p1Points: 30, p2Points: 16, innings: 9, p1HighRun: 9, p2HighRun: 4, target: 30 };
+  const outcome = straightPoolMatchOutcome(1600, 1600, matchData, spConfig);
+  assert.equal(outcome.mpA, 1);
+  assert.equal(outcome.mpB, 0);
+  closeTo(outcome.s141A, 0.7048829431438128);
+  closeTo(outcome.s141B, 0.29511705685618733);
+  closeTo(outcome.change, 18.548676671293293);
+  assert.equal(outcome.perfA, 1725);
+  assert.equal(outcome.perfB, 1475);
+  closeTo(outcome.npdA, 0.4666666666666667);
+  closeTo(outcome.npdB, -0.4666666666666667);
+  closeTo(outcome.gdA, 30 / 9);
+  closeTo(outcome.gdB, 16 / 9);
+});
+
+test('straightPoolMatchOutcome: reverse player perspective mirrors A/B exactly', () => {
+  const forward = straightPoolMatchOutcome(1600, 1600, { p1Points: 30, p2Points: 16, innings: 9, p1HighRun: 9, p2HighRun: 4, target: 30 }, spConfig);
+  const reverse = straightPoolMatchOutcome(1600, 1600, { p1Points: 16, p2Points: 30, innings: 9, p1HighRun: 4, p2HighRun: 9, target: 30 }, spConfig);
+  assert.equal(reverse.mpA, forward.mpB);
+  assert.equal(reverse.mpB, forward.mpA);
+  closeTo(reverse.s141A, forward.s141B);
+  closeTo(reverse.s141B, forward.s141A);
+  closeTo(reverse.perfA, forward.perfB);
+  closeTo(reverse.perfB, forward.perfA);
+  closeTo(reverse.npdA, forward.npdB);
+  closeTo(reverse.gdA, forward.gdB);
+});
+
+test('straightPoolMatchOutcome: zero-sum GBR change between the two players\' true perspectives', () => {
+  const changeA = straightPoolMatchOutcome(1700, 1500, { p1Points: 30, p2Points: 16, innings: 9, p1HighRun: 9, p2HighRun: 4, target: 30 }, spConfig).change;
+  const changeB = straightPoolMatchOutcome(1500, 1700, { p1Points: 16, p2Points: 30, innings: 9, p1HighRun: 4, p2HighRun: 9, target: 30 }, spConfig).change;
+  closeTo(changeA + changeB, 0, 1e-9);
+  closeTo(changeA, 4.2829721547808095);
+});
+
+test('straightPoolMatchOutcome: PERF uses each side\'s pre-match opponent GBR, not the post-change value', () => {
+  const matchData = { p1Points: 30, p2Points: 16, innings: 9, p1HighRun: 9, p2HighRun: 4, target: 30 };
+  const outcome = straightPoolMatchOutcome(1700, 1500, matchData, spConfig);
+  // perfA is derived from B's PRE-match GBR (1500), perfB from A's PRE-match GBR (1700).
+  assert.equal(outcome.perfA, 1625);
+  assert.equal(outcome.perfB, 1575);
+});
+
+test('straightPoolMatchOutcome: useTargetScaledK=false uses the flat k_14_1 (matches calcStraightPoolGbrChange directly)', () => {
+  const matchData = { p1Points: 30, p2Points: 16, innings: 9, p1HighRun: 9, p2HighRun: 4, target: 30 };
+  const flatSp = { ...STRAIGHT_POOL_DEFAULTS, useTargetScaledK: false };
+  const outcome = straightPoolMatchOutcome(1600, 1600, matchData, { d, k_m, sp: flatSp });
+  closeTo(outcome.change, 19.09765886287626);
+  closeTo(outcome.change, calcStraightPoolGbrChange(1600, 1600, matchData, { d, k_m, sp: flatSp }));
+});
+
+test('straightPoolMatchOutcome: composes the already-tested building blocks (signals/PERF/GBR-change/NPD) rather than a separate formula', () => {
+  const matchData = { p1Points: 30, p2Points: 16, innings: 9, p1HighRun: 9, p2HighRun: 4, target: 30 };
+  const outcome = straightPoolMatchOutcome(1700, 1500, matchData, spConfig);
+  const sigA = calcStraightPoolSignals(30, 16, 9, 9, 4, 30, STRAIGHT_POOL_DEFAULTS);
+  const sigB = calcStraightPoolSignals(16, 30, 9, 4, 9, 30, STRAIGHT_POOL_DEFAULTS);
+  assert.equal(outcome.s141A, sigA.s141);
+  assert.equal(outcome.s141B, sigB.s141);
+  assert.equal(outcome.perfA, calcStraightPoolPerf(1500, sigA.s141, d));
+  assert.equal(outcome.perfB, calcStraightPoolPerf(1700, sigB.s141, d));
+  assert.equal(outcome.change, calcStraightPoolGbrChange(1700, 1500, matchData, spConfig));
+  assert.equal(outcome.npdA, calcNPD(30, 16, 30));
+  assert.equal(outcome.npdB, calcNPD(16, 30, 30));
+});
+
+test('straightPoolMatchOutcome: representative historical fixture match (sanity check, not a golden master)', async () => {
+  const matches = JSON.parse(await readFile(new URL('./fixtures/historical/vm-joes-14-1/matches.json', import.meta.url), 'utf8'));
+  const m = matches.find((match) => match.round === 1 && match.table === '304');
+  const outcome = straightPoolMatchOutcome(
+    m.historicalGbrA.before,
+    m.historicalGbrB.before,
+    { p1Points: m.pointsA, p2Points: m.pointsB, innings: m.innings, p1HighRun: m.highRunA, p2HighRun: m.highRunB, target: m.exportedTarget },
+    spConfig
+  );
+  // Under today's default straightPool config, this happens to reproduce the
+  // recorded historical PERF for this specific match — a sanity check, not
+  // proof that the historical export used identical config (it is not known to).
+  assert.equal(outcome.perfA, 1782);
+  assert.equal(outcome.mpA, 1);
 });
