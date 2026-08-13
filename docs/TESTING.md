@@ -73,7 +73,41 @@ first match produced (not a re-read of the starting source). `PoolTournamentApp.
 now retains only a thin wrapper that resolves its own component state into
 these explicit inputs.
 
-`npm test` currently passes 65/65 and `npm run build` passes.
+## CURRENT — Canonical tournament-state model (M2G)
+
+`src/domain/tournamentModel.js` defines and documents the `Tournament`/
+`Player`/`Match`/`Config` shapes the current application actually uses,
+including legacy compatibility details: two bye encodings; `removed`/
+`joinedRound` fallback semantics; the separate roster used only for
+starting-GBR resolution; always-present 14.1 aggregate fields; `format` being
+genuinely optional on a Match (the Manual Pairing Editor's stored matches
+omit it entirely — `createMatch()` does not default it); and the confirmed,
+preserved divergence between `config` (live, active calculation settings)
+and `tournamentConfig` (a separate setup/display snapshot, independently
+editable via the title-edit flow, not updated by mid-tournament settings
+changes) — both fields are represented, unmerged. A separate
+`ApplicationState`/`PreAdvanceSnapshot` shape represents the current
+emergency-undo feature's persisted data, distinct from `Tournament` truth and
+from UI state. It is additive only — `PoolTournamentApp.jsx` does not
+construct or consume this model yet.
+
+`tests/tournament-model.test.js` covers: representing a minimal fixed-rack
+event and a 14.1 event, a JSON round-trip preserving meaning, legacy-optional
+fields surviving construction (including an absent `format`), player ids
+never being type-coerced, match snapshot/target/table/done/cancelled/bye
+representability (under both legacy bye encodings), `removed`/`joinedRound`
+representability, the absence of functions/class instances/Map/Set/Date
+anywhere in the model, `validateTournamentState()` accepting quirky-but-legal
+legacy shapes while rejecting only structurally malformed input, `config`/
+`tournamentConfig` divergence surviving JSON serialization, a partial
+`straightPool` config override merging onto defaults rather than replacing
+them, a production-style Manual Pairing Editor match and a production-style
+`createPairings()` match, a configured-but-not-yet-started (pre-Round-1)
+tournament, a mid-`nextRound()` promoted player's transient shape, and
+`PreAdvanceSnapshot`/`ApplicationState` round-tripping through JSON without
+losing undo-required data.
+
+`npm test` currently passes 83/83 and `npm run build` passes.
 
 ## FUTURE — Reference tournament / golden master
 

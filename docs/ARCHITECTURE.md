@@ -14,6 +14,22 @@ The legacy application is valuable as a working reference, but this architecture
 
 During M0, the primary goal is only to make this application run in a conventional project. A large React component is temporarily acceptable.
 
+## CURRENT — M2 domain extraction progress
+
+`src/PoolTournamentApp.jsx` is still the running orchestration and state owner: it holds every `useState`, drives `recalc()`, pairing, persistence, and rendering. That has not changed.
+
+What has changed during M2 so far:
+
+- stable fixed-rack calculations (`src/domain/fixedRackBbs.js`) and experimental GBR_14.1 calculations (`src/domain/straightPool14_1.js`) are pure, tested, explicit-parameter modules the component calls into, rather than a second in-component implementation;
+- before-round pairing reconstruction (`src/domain/beforeRoundStandings.js`) is a pure, tested function the component wraps, rather than inline component logic;
+- a canonical, serializable tournament-state model now exists (`src/domain/tournamentModel.js`) documenting the `Tournament`/`Player`/`Match`/`Config` shapes the current application actually uses, plus a separate operational/session-state shape (`ApplicationState`/`PreAdvanceSnapshot`) for the current emergency-undo feature.
+
+The canonical model is **not yet wired into the component**. `PoolTournamentApp.jsx` still owns its own `useState`-based state exactly as before; the model exists alongside it as a defined target shape, not a replacement. Converting the component's state to this model, introducing an application/store layer, and standing up a backend are later M2 tasks.
+
+**`config` and `tournamentConfig` are separate today and can genuinely diverge — this is preserved, not consolidated, in the model.** `config` is the *active* calculation configuration recalc()/pairing/the domain match-outcome functions read, and it is live-editable at any time, including mid-tournament via the "Tournament Settings" modal. `tournamentConfig` is a separate `{title, ...settings}` snapshot captured at setup time; only its `title` is independently editable afterward (via the "edit title" flow), while its settings fields are never updated again once a tournament starts — so after a mid-tournament settings change, `tournamentConfig`'s settings values and `config`'s current values legitimately disagree, and the "Tournament Overview"/results-header display panels (which read `tournamentConfig`) can show stale values relative to what recalc() is actually using. Both are independently persisted in and restored from the localStorage autosave snapshot today. `src/domain/tournamentModel.js`'s `Tournament` shape represents both fields, unmerged, for legacy parity. A later, deliberate consolidation of this duplication is a possible **TARGET** direction once the application/store layer exists — it has **not** happened yet, and this module does not assume it.
+
+`preAdvanceSnapshot` (the emergency "undo round advance" buffer nextRound() saves and confirmUndoAdvance() restores) is likewise separate persisted state — currently autosaved alongside the tournament, but not itself tournament truth. The model represents it as its own `PreAdvanceSnapshot` shape, wrapped together with `Tournament` in a small `ApplicationState` shape, distinct from both `Tournament` state (authoritative truth) and UI state (dialogs/tabs/forms, never persisted here).
+
 ## TARGET — Three architectural concerns
 
 RACK HUB separates three concerns:
@@ -90,6 +106,8 @@ The backend owns authoritative tournament state and publication concerns:
 - later: persistent tournament/player history.
 
 The initial local backend may be intentionally small. Architecture should favor transparency and reliability over infrastructure complexity.
+
+`src/domain/tournamentModel.js` defines the CURRENT candidate shape for that authoritative state (`Tournament`/`Player`/`Match`/`Config`/`tournamentConfig`, plus a `schemaVersion` field and lightweight structural validation), derived from what `PoolTournamentApp.jsx` actually uses today — including its current `config`/`tournamentConfig` duplication, preserved rather than resolved (see above). It is TARGET in the sense that nothing owns or persists it yet — no store, no API, no localStorage adapter reads or writes it. Building the application/store layer that makes this shape authoritative, and the API that serves it, remain later M2 work.
 
 ### State rule
 
