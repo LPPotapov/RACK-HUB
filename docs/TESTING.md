@@ -107,7 +107,46 @@ tournament, a mid-`nextRound()` promoted player's transient shape, and
 `PreAdvanceSnapshot`/`ApplicationState` round-tripping through JSON without
 losing undo-required data.
 
-`npm test` currently passes 83/83 and `npm run build` passes.
+## CURRENT — Legacy-to-canonical application boundary (M2H)
+
+`src/application/legacyStateAdapter.js`'s `captureApplicationStateFromLegacy()`
+maps the component's actual current state values into the canonical
+`ApplicationState`, one direction only (legacy → canonical; no reverse
+mapping yet). It is a pure mapping, not a cleanup pass — it does not add a
+`format` to a format-less match, does not fill in a transient player's
+missing aggregate fields, and does not unify the two legacy bye encodings.
+`PoolTournamentApp.jsx` does not call it yet.
+
+The adapter distinguishes three current legacy lifecycle states rather than
+treating `tournament === null` as always meaning "nothing to map": **EMPTY**
+(`tournamentConfig === null`, canonical `tournament: null`),
+**CONFIGURED_PRE_START** (`tournamentConfig` set but `tournament` still null —
+an event configured, players possibly already registered, before "Start
+Tournament" — canonical `tournament` is non-null, with `players: []`,
+`roster`/`pendingPlayers` preserved, and `totalRounds` read from
+`config.default_rounds`), and **RUNNING** (`tournament !== null`, mapped from
+its own `players`/`totalRounds`, unchanged from the original M2H mapping).
+
+`tests/legacy-state-adapter.test.js` covers: a normal fixed-rack running
+tournament and a 14.1 running tournament mapping correctly, `config`/
+`tournamentConfig` staying independent through the mapping, the global roster
+and `tournament.players` staying independent (a pending, not-yet-promoted
+player), pending players surviving unchanged, `allRounds` becoming canonical
+`Tournament.rounds`, `preAdvanceSnapshot` keeping its actual `allRounds` field
+name (never renamed to `rounds`), a format-less Manual Pairing Editor match
+surviving unchanged, both legacy bye encodings surviving unmerged, a
+transient mid-`nextRound()` player shape surviving without added fields, the
+captured snapshot sharing no mutable references with the legacy inputs
+(verified by mutating the originals after capture and asserting no effect),
+the produced state always passing `validateApplicationState()`, the adapter
+throwing a clear error for structurally invalid legacy input, and an explicit
+state-mode matrix (EMPTY, CONFIGURED_PRE_START, RUNNING, RUNNING with a
+preAdvanceSnapshot, RUNNING with config/tournamentConfig divergence) —
+including the CONFIGURED_PRE_START case that this correction fixes:
+configuration and roster now survive instead of collapsing to
+`tournament: null`.
+
+`npm test` currently passes 101/101 and `npm run build` passes.
 
 ## FUTURE — Reference tournament / golden master
 

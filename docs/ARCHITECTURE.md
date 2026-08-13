@@ -30,6 +30,13 @@ The canonical model is **not yet wired into the component**. `PoolTournamentApp.
 
 `preAdvanceSnapshot` (the emergency "undo round advance" buffer nextRound() saves and confirmUndoAdvance() restores) is likewise separate persisted state — currently autosaved alongside the tournament, but not itself tournament truth. The model represents it as its own `PreAdvanceSnapshot` shape, wrapped together with `Tournament` in a small `ApplicationState` shape, distinct from both `Tournament` state (authoritative truth) and UI state (dialogs/tabs/forms, never persisted here).
 
+A legacy-to-canonical application boundary now exists: `src/application/legacyStateAdapter.js`'s `captureApplicationStateFromLegacy()` maps the component's actual current state values (`config`, `tournamentConfig`, `tournament`, `players`, `pendingPlayers`, `allRounds`, `currentRound`, `preAdvanceSnapshot`) into a canonical `ApplicationState`, one direction only. It is a pure mapping — it does not normalize, default, or unify anything the legacy state doesn't already contain (an absent match `format`, either legacy bye encoding, and a transient/not-yet-recalculated player shape all pass through unchanged), and it returns a JSON-safe deep clone with no shared references back to the caller's state. **`PoolTournamentApp.jsx` does not call this adapter yet** — it exists as a boundary the component can be wired through later, not a replacement for its current state ownership. There is intentionally no reverse (canonical → legacy) mapping yet.
+
+The legacy application has three distinct current lifecycle states, and `tournament === null` alone does **not** mean "nothing to map" — the adapter distinguishes all three (derived from existing `tournament`/`tournamentConfig` nullity; not a new persisted `status` field):
+- **EMPTY** — `tournamentConfig === null` (the app has just loaded, nothing configured yet) → canonical `tournament: null`.
+- **CONFIGURED_PRE_START** — `tournamentConfig !== null` but `tournament === null` (an event has been set up and players may already be registered, but "Start Tournament" hasn't been clicked) → a real canonical `Tournament` representing the configured event, with `players: []` (nobody has joined as an accumulating participant yet — that would fabricate state), `roster`/`pendingPlayers` preserved from the actual registered players, and `totalRounds` read from `config.default_rounds` (the same field `startTournament()` itself reads once it runs).
+- **RUNNING** — `tournament !== null` → the existing mapping, unchanged.
+
 ## TARGET — Three architectural concerns
 
 RACK HUB separates three concerns:
@@ -107,7 +114,9 @@ The backend owns authoritative tournament state and publication concerns:
 
 The initial local backend may be intentionally small. Architecture should favor transparency and reliability over infrastructure complexity.
 
-`src/domain/tournamentModel.js` defines the CURRENT candidate shape for that authoritative state (`Tournament`/`Player`/`Match`/`Config`/`tournamentConfig`, plus a `schemaVersion` field and lightweight structural validation), derived from what `PoolTournamentApp.jsx` actually uses today — including its current `config`/`tournamentConfig` duplication, preserved rather than resolved (see above). It is TARGET in the sense that nothing owns or persists it yet — no store, no API, no localStorage adapter reads or writes it. Building the application/store layer that makes this shape authoritative, and the API that serves it, remain later M2 work.
+`src/domain/tournamentModel.js` defines the CURRENT candidate shape for that authoritative state (`Tournament`/`Player`/`Match`/`Config`/`tournamentConfig`, plus a `schemaVersion` field and lightweight structural validation), derived from what `PoolTournamentApp.jsx` actually uses today — including its current `config`/`tournamentConfig` duplication, preserved rather than resolved (see above). It is TARGET in the sense that nothing owns or persists it yet — no store, no API, no localStorage adapter reads or writes it.
+
+TARGET: once an application/store layer exists, it — not `PoolTournamentApp.jsx` — will own `ApplicationState` as authoritative, using `src/application/legacyStateAdapter.js` (or its eventual replacement/reverse) as the seam during migration; the React frontend will consume that boundary rather than holding tournament truth in its own `useState`. Building that store layer, wiring the component through it, and the API that serves it to other clients all remain later M2 work — none of it exists yet.
 
 ### State rule
 
