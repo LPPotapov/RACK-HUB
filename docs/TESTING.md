@@ -146,7 +146,35 @@ including the CONFIGURED_PRE_START case that this correction fixes:
 configuration and roster now survive instead of collapsing to
 `tournament: null`.
 
-`npm test` currently passes 101/101 and `npm run build` passes.
+## CURRENT — In-memory application store (M2I)
+
+`src/application/tournamentStore.js`'s `createTournamentStore(initialApplicationState)`
+owns one canonical `ApplicationState` value in memory: `getState()`,
+`replaceState()`, `updateState()`, and one read-only query,
+`getStandingsBeforeRound(roundLimit)`, which delegates to
+`reconstructStandingsBeforeRound()`. It implements no tournament-lifecycle
+commands yet. `PoolTournamentApp.jsx` does not use it.
+
+`tests/tournament-store.test.js` covers: creating a store in each of the four
+approved lifecycle modes (EMPTY, CONFIGURED_PRE_START, RUNNING, RUNNING with
+a `preAdvanceSnapshot`), invalid initial state being rejected,
+`getState()` returning an isolated copy on every call, mutating the initial
+input or a `getState()`/`replaceState()` argument after the fact never
+affecting the store, `replaceState()` rejecting invalid input while leaving
+the previous valid state intact, `getStandingsBeforeRound()` producing exact,
+independently-verified results for both a multi-round fixed-rack history and
+a GBR_14.1 history (reusing the same known values as
+`tests/before-round-standings.test.js`), that query never mutating store
+state, throwing clearly for an EMPTY application, returning `{}` for a
+CONFIGURED_PRE_START tournament with no participants yet, `config`/
+`tournamentConfig` divergence and roster/`tournament.players` independence
+both surviving store ownership, and the store's state always being plain
+JSON-serializable with no functions anywhere in it. `updateState()` is
+directly tested for: successful commit, isolated updater input, invalid/
+undefined return atomicity, thrown-error atomicity, and post-commit
+reference isolation.
+
+`npm test` currently passes 126/126 and `npm run build` passes.
 
 ## FUTURE — Reference tournament / golden master
 
