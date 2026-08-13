@@ -13,7 +13,10 @@
 // concern at all). Not a command framework — one small named export per
 // operation.
 
+import { compareFixedRackPairingOrder } from '../domain/fixedRackBbs.js';
 import { generatePairings as generatePairingsCommand } from '../domain/pairing.js';
+import { compareStraightPool, isStraightPool } from '../domain/straightPool14_1.js';
+import { createPreAdvanceSnapshot } from '../domain/tournamentModel.js';
 import { recalculateTournamentPlayers } from '../domain/tournamentRecalculation.js';
 
 // ---------------------------------------------------------------------------
@@ -544,5 +547,269 @@ export const recordMatchResult = (applicationState, { roundNumber, matchId, r1, 
       rounds: updatedRounds,
       players: recalculatedPlayers
     }
+  };
+};
+
+// ---------------------------------------------------------------------------
+// advanceTournamentRound
+// ---------------------------------------------------------------------------
+//
+// CURRENT legacy behavior this preserves exactly (verified by direct
+// inspection of PoolTournamentApp.jsx's nextRound() before writing this —
+// not assumed):
+//
+//   - Completion gate: `(allRounds[currentRound] || []).every(m => m.done ||
+//     m.cancelled)` — EVERY match in the CURRENT round must be `done` OR
+//     `cancelled`; a single incomplete match blocks advancement entirely.
+//     Legacy's `|| []` fallback makes a MISSING current round vacuously
+//     "complete" (an empty array's `.every()` is trivially true) — this
+//     command does NOT reproduce that: a missing current round is
+//     structurally possible (an artificial canonical Tournament with
+//     `currentRound` not matching any real generated round — the same
+//     category of not-UI-reachable edge case characterized for
+//     `startTournament()`'s bye-ordering quirk and `recalculateTournamentPlayers()`'s
+//     missing-player throw) but is rejected here with a clear error instead
+//     of silently "advancing" past a round that was never actually
+//     generated.
+//   - Final round: `if (currentRound >= tournament.totalRounds) {
+//     setView('results'); return; }` — legacy takes NO canonical action at
+//     all here (only a UI view switch, which has no canonical home). This
+//     command throws a clear, distinct error instead — there is no next
+//     round for a headless command to generate, and silently no-op-ing
+//     would hide that from the caller.
+//   - Standings source for pairing: legacy uses `tournament.players`
+//     DIRECTLY ("tournament.players already carries full recalc
+//     standings" — legacy's own comment), filtered `!removed`, mapped with
+//     a derived `avgPerf`, and sorted by `comparePairingOrder()`
+//     (format-aware: `compareStraightPool(a, b)` — called WITHOUT a
+//     `rankingSystem` argument, so it ALWAYS takes the Classic branch for
+//     PAIRING purposes regardless of the tournament's actual
+//     `config.ranking_system` — a genuine, deliberately-preserved quirk;
+//     `compareFixedRackPairingOrder(a, b)` otherwise). It does NOT call
+//     `reconstructStandingsBeforeRound()` — that function exists for
+//     regenerating the CURRENT round after a structural change
+//     (`performDeletePlayer()`/`removePlayersFromRound()`), a different
+//     legacy code path this command does not touch. This is a genuine
+//     discrepancy against this task's own suggested domain-boundary hint;
+//     source was verified directly rather than assumed from the hint (see
+//     docs/ARCHITECTURE.md).
+//   - CANONICAL-WORLD NECESSITY (not a legacy behavior change): legacy's
+//     `tournament.players` is kept synchronized only because a React
+//     `useEffect` re-runs `recalc()` on every `allRounds`/`currentRound`
+//     change — there is no such automatic mechanism here. This command
+//     therefore calls `recalculateTournamentPlayers()` itself before
+//     computing standings, so pairing input is always consistent even for
+//     an edge case no current command can otherwise guarantee (e.g. a
+//     round consisting only of byes, which `recordMatchResult()` never
+//     touches — byes are rejected there — so nothing else would have
+//     triggered a recalculation). Recalculating an already-consistent
+//     `players` array is idempotent (see tournamentRecalculation.js's own
+//     tests), so this changes nothing observable in the normal case.
+//   - Pending-player promotion: for each entry in `tournament.pendingPlayers`
+//     (in array order), a transient player object is built —
+//     `{ id, name, elo, mp:0, perf:0, perfCount:0, games:0, racksWon:0,
+//     racksLost:0, opps:[], removed:false, joinedRound: next, avgPerf:0 }`
+//     — deliberately missing `rp` and every 14.1 aggregate field, exactly
+//     like legacy's own construction (this is the mid-nextRound() transient
+//     shape already documented in tournamentModel.js's Player notes). It is
+//     spliced into the SORTED standings array immediately after whichever
+//     existing player has the closest `avgPerf` to the pending player's
+//     `elo` (first player if the list is empty) — each subsequent pending
+//     player's insertion point is computed against the array as already
+//     modified by prior insertions in this same call, exactly like legacy's
+//     `.forEach()`-with-mutation loop. This affects PAIRING seed order only;
+//     the final `tournament.players` update appends pending players in
+//     their original `pendingPlayers` array order, not the spliced order.
+//   - Pairing: delegates to `src/domain/pairing.js`'s `generatePairings()`
+//     with `startTableIndex: 0`, `roundNum: next`, `seedMethod: null`
+//     (irrelevant for any round beyond 1 — `generatePairings()`'s Round-1-
+//     only direct-pairing branch never triggers), `allRounds:
+//     tournament.rounds` (bye history through the current round), and an
+//     explicit `tableNumbers` argument (optional, UI-only round-setup
+//     input with no canonical home, exactly like `startTournament()`'s
+//     `tableNumbers` — legacy's `nextRound()` reads the SAME closure-scoped
+//     `tableNumbers` state Round 1 used, always restarting from index 0).
+//     No BBS/pairing formula changes.
+//   - Ordering/atomicity: legacy computes pairings FIRST and only commits
+//     any state change if `generatePairings()` succeeds — its own comment:
+//     "Create pairings from augmented seeding list FIRST. Do not advance
+//     round state or mutate tournament/pending until we know pairings are
+//     legal." This is the CORRECT ordering (unlike `startTournament()`'s
+//     discovered `setTournament()`-before-bye-check bug) — this command
+//     mirrors it exactly, and it falls out naturally from being a single
+//     pure function that only returns a new state on success.
+//   - Discovered quirk, characterized not reproduced: legacy captures
+//     `preAdvanceSnapshot` BEFORE checking whether pairing succeeds — so a
+//     failed advance (no legal bye) still leaves a stale snapshot behind
+//     (identical to the current state, since nothing else changed). This
+//     command does not set a snapshot on failure at all, consistent with
+//     every other pure command in this codebase leaving the caller's state
+//     completely unchanged on a throw.
+//   - No legal bye (whitepaper §9.2): unlike `startTournament()`'s Round-1
+//     case, this IS reachable through ordinary play (real bye history
+//     accumulates round over round) — `generatePairings()` returning `null`
+//     here is a normal, expected outcome, not an artificial edge case; this
+//     command throws a clear error, matching legacy's own
+//     `setShowByeError(true)` signal.
+//   - On success, commits atomically: `tournament.players` becomes the
+//     recalculated players PLUS the newly promoted pending players
+//     (appended, matching legacy's `[...tournament.players,
+//     ...newTournamentPlayers]`); `tournament.rounds` MERGES the new round
+//     in (`{ ...tournament.rounds, [next]: matches }` — every prior round
+//     survives completely untouched, unlike `startTournament()`'s wholesale
+//     `rounds: { 1: matches }` replace, since there is nothing to preserve
+//     at Round 1); `currentRound` becomes `next`; `pendingPlayers` is
+//     CLEARED (`[]`) — unlike `startTournament()`, which deliberately does
+//     NOT clear `pendingPlayers`, this command does, exactly like legacy's
+//     `setPendingPlayers([])` after promotion. `viewingRound` has no
+//     canonical home (as established) and is not part of this command's
+//     output.
+//   - `preAdvanceSnapshot`: captured on every successful advance, using the
+//     PRE-advance values exactly (not the internally-recalculated ones —
+//     the snapshot's job is "restore me to what was actually here before,"
+//     not a corrected version of it): `{ tournament: { players:
+//     <pre-advance tournament.players>, totalRounds }, allRounds:
+//     <pre-advance tournament.rounds>, currentRound: <pre-advance
+//     currentRound>, viewingRound: <pre-advance currentRound>,
+//     pendingPlayers: <pre-advance pendingPlayers> }`. `viewingRound` has no
+//     canonical source, but legacy's "Next Round" button is only ever
+//     rendered when `viewingRound === currentRound` — the ONLY value it can
+//     hold at any legacy-reachable call to nextRound() — so using the
+//     pre-advance `currentRound` here is not an invented value, it is the
+//     one value legacy's own capture would always equal. The nested
+//     `tournament` field keeps the LEGACY `{ players, totalRounds }` shape,
+//     not a full canonical Tournament — matching the existing, established
+//     `PreAdvanceSnapshot` contract exactly (see tournamentModel.js);
+//     `allRounds` is never renamed to `rounds`.
+//   - DETACHMENT (Codex follow-up fix): legacy's own snapshot capture is
+//     `JSON.parse(JSON.stringify(...))` on `tournament` and `allRounds` and
+//     `pendingPlayers` — a full deep clone, not a shallow reference copy.
+//     The snapshot is built here from the SAME pre-advance values this
+//     function also derives `result.tournament.rounds`/`.players`/
+//     `.pendingPlayers` from, so both the whole `preAdvanceSnapshot` object
+//     AND `result.tournament.rounds` are independently
+//     `JSON.parse(JSON.stringify(...))`-cloned before being returned —
+//     mirroring legacy's own clone semantics with the smallest possible
+//     implementation (the same pattern already used throughout this
+//     codebase, e.g. `tournamentStore.js`'s `clone()`). Without this,
+//     `result.preAdvanceSnapshot.allRounds`, `result.tournament.rounds`, and
+//     `applicationState.tournament.rounds` would all reference the exact
+//     same nested match arrays — mutating any one of them (including a
+//     future correction to an old round via `recordMatchResult()`) would
+//     silently corrupt the other two. `result.tournament.players` and
+//     `newTournamentPlayers` do not need explicit cloning here — both are
+//     already freshly constructed objects (`recalculateTournamentPlayers()`
+//     maps every player to a new object; pending-player promotion builds
+//     literal objects), never aliased to `applicationState.tournament.players`
+//     — but `preAdvanceSnapshot.tournament.players` IS the raw pre-advance
+//     array, so it still needs the snapshot-wide clone.
+//   - Lifecycle: requires a real RUNNING tournament (`tournament !== null`,
+//     `started === true`) — nextRound() is only reachable from the round
+//     view, which requires an active tournament.
+export const advanceTournamentRound = (applicationState, { tableNumbers = [] } = {}) => {
+  const tournament = applicationState?.tournament;
+  if (!tournament) {
+    throw new Error('advanceTournamentRound: no tournament in this ApplicationState (application is EMPTY)');
+  }
+  if (tournament.started !== true) {
+    throw new Error('advanceTournamentRound: tournament has not started yet (started must be true)');
+  }
+
+  const currentRoundMatches = tournament.rounds[tournament.currentRound];
+  if (!currentRoundMatches) {
+    throw new Error(`advanceTournamentRound: round ${tournament.currentRound} does not exist`);
+  }
+  if (!currentRoundMatches.every((m) => m.done || m.cancelled)) {
+    throw new Error('advanceTournamentRound: all matches in the current round must be completed or cancelled first');
+  }
+  if (tournament.currentRound >= tournament.totalRounds) {
+    throw new Error('advanceTournamentRound: tournament has already reached its final round (totalRounds)');
+  }
+
+  const next = tournament.currentRound + 1;
+
+  const recalculatedPlayers = recalculateTournamentPlayers({
+    players: tournament.players,
+    roster: tournament.roster,
+    rounds: tournament.rounds,
+    currentRound: tournament.currentRound,
+    config: tournament.config
+  });
+
+  const sorted = recalculatedPlayers
+    .filter((p) => !p.removed)
+    .map((p) => ({ ...p, avgPerf: p.perfCount > 0 ? p.perf / p.perfCount : 0 }))
+    .sort((a, b) => (isStraightPool(tournament.config.format) ? compareStraightPool(a, b) : compareFixedRackPairingOrder(a, b)));
+
+  const newTournamentPlayers = [];
+  tournament.pendingPlayers.forEach((pendingPlayer) => {
+    const tournamentPlayer = {
+      id: pendingPlayer.id,
+      name: pendingPlayer.name,
+      elo: pendingPlayer.elo,
+      mp: 0,
+      perf: 0,
+      perfCount: 0,
+      games: 0,
+      racksWon: 0,
+      racksLost: 0,
+      opps: [],
+      removed: false,
+      joinedRound: next,
+      avgPerf: 0
+    };
+
+    if (sorted.length === 0) {
+      sorted.push(tournamentPlayer);
+    } else {
+      let closestIndex = 0;
+      let closestDiff = Math.abs(sorted[0].avgPerf - pendingPlayer.elo);
+      for (let i = 1; i < sorted.length; i++) {
+        const diff = Math.abs(sorted[i].avgPerf - pendingPlayer.elo);
+        if (diff < closestDiff) {
+          closestDiff = diff;
+          closestIndex = i;
+        }
+      }
+      sorted.splice(closestIndex + 1, 0, tournamentPlayer);
+    }
+
+    newTournamentPlayers.push(tournamentPlayer);
+  });
+
+  const matches = generatePairingsCommand(sorted, {
+    startTableIndex: 0,
+    roundNum: next,
+    seedMethod: null,
+    allRounds: tournament.rounds,
+    tableNumbers,
+    config: tournament.config
+  });
+
+  if (matches === null) {
+    throw new Error('advanceTournamentRound: no legal bye available for the next round (whitepaper §9.2)');
+  }
+
+  // Deep-cloned (see the DETACHMENT note above) so the snapshot can never be
+  // silently corrupted by a later mutation to the returned tournament, or
+  // vice versa — matching legacy's own JSON.parse(JSON.stringify(...)) snapshot capture.
+  const preAdvanceSnapshot = JSON.parse(JSON.stringify(createPreAdvanceSnapshot({
+    tournament: { players: tournament.players, totalRounds: tournament.totalRounds },
+    allRounds: tournament.rounds,
+    currentRound: tournament.currentRound,
+    viewingRound: tournament.currentRound,
+    pendingPlayers: tournament.pendingPlayers
+  })));
+
+  return {
+    ...applicationState,
+    tournament: {
+      ...tournament,
+      players: [...recalculatedPlayers, ...newTournamentPlayers],
+      rounds: { ...JSON.parse(JSON.stringify(tournament.rounds)), [next]: matches },
+      currentRound: next,
+      pendingPlayers: []
+    },
+    preAdvanceSnapshot
   };
 };
