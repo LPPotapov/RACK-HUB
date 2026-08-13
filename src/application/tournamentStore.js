@@ -8,12 +8,12 @@
 //   ApplicationState -> createTournamentStore(...) -> domain functions
 //
 // A small plain-JavaScript factory, not a framework: no Redux/Zustand/MobX,
-// no EventEmitter, no React, no browser APIs, no persistence. Deliberately
-// implements only one small tournament-changing command so far (M2J's
-// assignMatchTable — see below); the rest of the tournament lifecycle
-// (startTournament/nextRound/completeMatch/undo/pairing/...) remains future,
-// one-at-a-time migrations. It also exposes one read/query that demonstrates
-// using the domain layer without putting formulas back in application code.
+// no EventEmitter, no React, no browser APIs, no persistence. Implements two
+// tournament-changing commands so far (M2J's assignMatchTable and M2L's
+// startTournament — see below); the rest of the tournament lifecycle
+// (nextRound/completeMatch/undo/...) remains future, one-at-a-time
+// migrations. It also exposes one read/query that demonstrates using the
+// domain layer without putting formulas back in application code.
 //
 // legacyStateAdapter.js remains the only bridge from legacy React state; this
 // module never reads PoolTournamentApp.jsx's shape and accepts canonical
@@ -21,7 +21,7 @@
 
 import { reconstructStandingsBeforeRound } from '../domain/beforeRoundStandings.js';
 import { validateApplicationState } from '../domain/tournamentModel.js';
-import { assignMatchTable as assignMatchTableCommand } from './tournamentCommands.js';
+import { assignMatchTable as assignMatchTableCommand, startTournament as startTournamentCommand } from './tournamentCommands.js';
 
 // JSON-safe deep clone — the same JSON.parse(JSON.stringify(...)) pattern
 // already used by nextRound()'s undo snapshot and legacyStateAdapter.js.
@@ -113,5 +113,21 @@ export const createTournamentStore = (initialApplicationState) => {
     updateState((current) => assignMatchTableCommand(current, args));
   };
 
-  return { getState, replaceState, updateState, getStandingsBeforeRound, assignMatchTable };
+  // Application command: transitions a CONFIGURED_PRE_START tournament
+  // (started: false) to RUNNING (started: true) and generates Round 1,
+  // committed atomically through updateState() — no separate validation,
+  // cloning, or pairing/lifecycle logic here; this is a thin wrapper over
+  // the pure startTournament() command from tournamentCommands.js, which
+  // owns the characterized legacy startTournament()/createPairings()
+  // semantics (see tournamentCommands.js and src/domain/pairing.js). If the
+  // application is EMPTY, the tournament has already started, `seedMethod`
+  // is missing, or no legal bye exists for Round 1, the command throws
+  // before updateState()'s replaceState() call is ever reached, so the
+  // store's state is left exactly as it was (same atomicity guarantee
+  // already proven for updateState() in general).
+  const startTournament = (args) => {
+    updateState((current) => startTournamentCommand(current, args));
+  };
+
+  return { getState, replaceState, updateState, getStandingsBeforeRound, assignMatchTable, startTournament };
 };

@@ -834,3 +834,146 @@ test('33: while started: false, roster/pending-player changes commit without tog
   assert.equal(state.tournament.tournamentConfig.title, 'Friday Night Championship');
   assert.deepEqual(state.tournament.players, []);
 });
+
+// ---------------------------------------------------------------------------
+// store.startTournament() (M2L) — the characterized legacy semantics
+// themselves are already fully covered by tests/tournament-commands.test.js
+// against the pure command; these tests focus on what the store adds:
+// exposing it as a method, committing through updateState(), and leaving
+// everything else (including subsequent store operations) working normally.
+// ---------------------------------------------------------------------------
+
+const preStartStoreState = (overrides = {}) => {
+  const config = createConfig(overrides.config);
+  return createApplicationState({
+    tournament: createTournamentState({
+      started: false,
+      config,
+      tournamentConfig: { title: 'Club Night', ...config },
+      players: [],
+      roster: overrides.roster ?? [
+        { id: 1, name: 'Alpha', elo: 1600 },
+        { id: 2, name: 'Bravo', elo: 1500 },
+        { id: 3, name: 'Charlie', elo: 1550 },
+        { id: 4, name: 'Delta', elo: 1450 }
+      ],
+      pendingPlayers: [],
+      rounds: {},
+      currentRound: 0
+    })
+  });
+};
+
+test('34: store.startTournament() commits a successful start; started becomes true', () => {
+  const store = createTournamentStore(preStartStoreState());
+  store.startTournament({ seedMethod: 'random' });
+
+  const state = store.getState();
+  assert.equal(state.tournament.started, true);
+  assert.equal(state.tournament.currentRound, 1);
+  assert.equal(state.tournament.players.length, 4);
+  assert.equal(state.tournament.rounds[1].length, 2);
+});
+
+test('35: a failed store.startTournament() (missing seedMethod) throws and leaves store state completely unchanged', () => {
+  const store = createTournamentStore(preStartStoreState());
+  const before = store.getState();
+
+  assert.throws(() => store.startTournament({}), /seedMethod is required/);
+
+  assert.deepEqual(store.getState(), before);
+});
+
+test('36: starting an already-RUNNING store throws and leaves store state unchanged', () => {
+  const p1 = createPlayer({ id: 1, name: 'Alpha', elo: 1600 });
+  const store = createTournamentStore(createApplicationState({
+    tournament: createTournamentState({ started: true, players: [p1], roster: [{ id: 1, name: 'Alpha', elo: 1600 }], rounds: {}, currentRound: 1 })
+  }));
+  const before = store.getState();
+
+  assert.throws(() => store.startTournament({ seedMethod: 'random' }), /already started/);
+
+  assert.deepEqual(store.getState(), before);
+});
+
+test('37: starting an EMPTY store throws and leaves store state unchanged', () => {
+  const store = createTournamentStore(createApplicationState());
+  assert.throws(() => store.startTournament({ seedMethod: 'random' }), /no tournament/);
+  assert.deepEqual(store.getState(), { tournament: null, preAdvanceSnapshot: null });
+});
+
+test('38: getState() isolation still holds after starting the tournament', () => {
+  const store = createTournamentStore(preStartStoreState());
+  store.startTournament({ seedMethod: 'random' });
+
+  const first = store.getState();
+  first.tournament.players[0].elo = 9999;
+  first.tournament.rounds[1][0].tbl = 'mutated';
+
+  const second = store.getState();
+  assert.notEqual(second.tournament.players[0].elo, 9999);
+  assert.notEqual(second.tournament.rounds[1][0].tbl, 'mutated');
+});
+
+test('39: unrelated config/tournamentConfig/roster values survive a store-level start unchanged', () => {
+  const config = createConfig({ d: 400 });
+  const store = createTournamentStore(createApplicationState({
+    tournament: createTournamentState({
+      started: false,
+      config,
+      tournamentConfig: { title: 'Preserved Title', ...config },
+      players: [],
+      roster: [{ id: 1, name: 'Alpha', elo: 1600 }, { id: 2, name: 'Bravo', elo: 1500 }],
+      pendingPlayers: [],
+      rounds: {},
+      currentRound: 0
+    })
+  }));
+
+  store.startTournament({ seedMethod: 'random' });
+
+  const state = store.getState();
+  assert.equal(state.tournament.config.d, 400);
+  assert.equal(state.tournament.tournamentConfig.title, 'Preserved Title');
+  assert.deepEqual(state.tournament.roster, [{ id: 1, name: 'Alpha', elo: 1600 }, { id: 2, name: 'Bravo', elo: 1500 }]);
+});
+
+test('40: assignMatchTable() still works normally on a store after startTournament()', () => {
+  const store = createTournamentStore(preStartStoreState());
+  store.startTournament({ seedMethod: 'random' });
+
+  const matchId = store.getState().tournament.rounds[1][0].id;
+  store.assignMatchTable({ roundNumber: 1, matchId, table: 'Court 9' });
+
+  assert.equal(store.getState().tournament.rounds[1][0].tbl, 'Court 9');
+});
+
+test('41: an artificial pre-start store state whose prior round history marks every player bye-ineligible fails startTournament() atomically (not reachable through normal UI workflow — see tournamentCommands.js)', () => {
+  const priorByeRound = [
+    { id: 'x', p1: { id: 1, elo: 1600 }, p2: { id: 'bye', name: 'FREILOS', elo: 1300 }, r1: 0, r2: 0, done: true, cancelled: false, bye: true },
+    { id: 'y', p1: { id: 2, elo: 1500 }, p2: { id: 'bye', name: 'FREILOS', elo: 1300 }, r1: 0, r2: 0, done: true, cancelled: false, bye: true },
+    { id: 'z', p1: { id: 3, elo: 1550 }, p2: { id: 'bye', name: 'FREILOS', elo: 1300 }, r1: 0, r2: 0, done: true, cancelled: false, bye: true }
+  ];
+  const config = createConfig();
+  const store = createTournamentStore(createApplicationState({
+    tournament: createTournamentState({
+      started: false,
+      config,
+      tournamentConfig: { title: 'Club Night', ...config },
+      players: [],
+      roster: [
+        { id: 1, name: 'Alpha', elo: 1600 },
+        { id: 2, name: 'Bravo', elo: 1500 },
+        { id: 3, name: 'Charlie', elo: 1550 }
+      ],
+      pendingPlayers: [],
+      rounds: { 0: priorByeRound }, // round key "0" (< generatePairings' hardcoded roundNum 1)
+      currentRound: 0
+    })
+  }));
+  const before = store.getState();
+
+  assert.throws(() => store.startTournament({ seedMethod: 'random' }), /no legal bye/);
+
+  assert.deepEqual(store.getState(), before);
+});
