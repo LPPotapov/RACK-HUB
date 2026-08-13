@@ -9,10 +9,11 @@
 //
 // A small plain-JavaScript factory, not a framework: no Redux/Zustand/MobX,
 // no EventEmitter, no React, no browser APIs, no persistence. Deliberately
-// does NOT implement any tournament-lifecycle command yet (no
-// startTournament/nextRound/completeMatch/undo/...) — only state ownership,
-// validation, mutation isolation, and one read/query that demonstrates using
-// the domain layer without putting formulas back in application code.
+// implements only one small tournament-changing command so far (M2J's
+// assignMatchTable — see below); the rest of the tournament lifecycle
+// (startTournament/nextRound/completeMatch/undo/pairing/...) remains future,
+// one-at-a-time migrations. It also exposes one read/query that demonstrates
+// using the domain layer without putting formulas back in application code.
 //
 // legacyStateAdapter.js remains the only bridge from legacy React state; this
 // module never reads PoolTournamentApp.jsx's shape and accepts canonical
@@ -20,6 +21,7 @@
 
 import { reconstructStandingsBeforeRound } from '../domain/beforeRoundStandings.js';
 import { validateApplicationState } from '../domain/tournamentModel.js';
+import { assignMatchTable as assignMatchTableCommand } from './tournamentCommands.js';
 
 // JSON-safe deep clone — the same JSON.parse(JSON.stringify(...)) pattern
 // already used by nextRound()'s undo snapshot and legacyStateAdapter.js.
@@ -96,5 +98,20 @@ export const createTournamentStore = (initialApplicationState) => {
     });
   };
 
-  return { getState, replaceState, updateState, getStandingsBeforeRound };
+  // Application command: assigns/changes a single match's table (`tbl`),
+  // committed atomically through updateState() — no separate validation,
+  // cloning, or command logic here; this is a thin wrapper over the pure
+  // assignMatchTable() command from tournamentCommands.js, which owns the
+  // characterized legacy table semantics (number-or-string, blank allowed,
+  // overwrite allowed, done/cancelled matches still changeable, no
+  // uniqueness enforcement — see tournamentCommands.js). If the round/match
+  // doesn't exist, or the application is EMPTY, the command throws before
+  // updateState()'s replaceState() call is ever reached, so the store's
+  // state is left exactly as it was (same atomicity guarantee already
+  // proven for updateState() in general).
+  const assignMatchTable = (args) => {
+    updateState((current) => assignMatchTableCommand(current, args));
+  };
+
+  return { getState, replaceState, updateState, getStandingsBeforeRound, assignMatchTable };
 };

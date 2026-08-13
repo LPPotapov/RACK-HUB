@@ -174,7 +174,46 @@ directly tested for: successful commit, isolated updater input, invalid/
 undefined return atomicity, thrown-error atomicity, and post-commit
 reference isolation.
 
-`npm test` currently passes 126/126 and `npm run build` passes.
+## CURRENT — First application command: match table assignment (M2J)
+
+`src/application/tournamentCommands.js`'s `assignMatchTable(applicationState, { roundNumber, matchId, table })`
+is the first pure application command that changes tournament data — only a
+single match's `tbl` field. `src/application/tournamentStore.js` now exposes
+this directly as `store.assignMatchTable({ roundNumber, matchId, table })`,
+committed through the store's existing `updateState()` boundary with no
+separate validation/cloning/command logic of its own. No round-lifecycle/
+pairing/BBS command exists yet.
+
+`tests/tournament-commands.test.js` covers the pure command: assigning a
+table to only the targeted match, overwriting an existing assignment,
+preserving the exact type of the supplied value (number or string, never
+coerced), accepting an empty value, changing no field other than `tbl`, a
+completed match's table remaining changeable (matching the current UI, which
+disables the input only for `cancelled`, not `done`), a cancelled match's
+table still being changeable at the data layer (the current `disabled`
+attribute is UI-only — nothing in `setAllRounds(...)` itself guards on
+`cancelled`), the deliberate absence of table-uniqueness validation (matching
+current code), no mutation of the input `ApplicationState`, no aliasing on
+the changed object-graph path, no effect on players/roster/other rounds, the
+result remaining a valid canonical `ApplicationState`, clear errors for an
+EMPTY application/missing round/missing match, and composition with
+`tournamentStore.updateState()`.
+
+`tests/tournament-store.test.js` covers the store-level `assignMatchTable()`
+method without re-deriving the pure command's semantics: a successful commit,
+overwriting an existing assignment, a blank `''` value surviving, numeric and
+string values preserving their type, a missing round/missing match/EMPTY
+application each throwing with the store's state left completely unchanged,
+only the targeted match changing (players/roster/pendingPlayers/config/
+`tournamentConfig` all untouched — no recalculation), an existing
+`preAdvanceSnapshot` left untouched (round-advance undo behavior is
+unaffected by table assignment), `getState()` isolation still holding
+afterward, the method working identically for a 14.1-formatted match and a
+match with no `format` field at all (the command has no format branching),
+and a numeric `roundNumber` correctly resolving a round whose canonical keys
+are (post-JSON-clone) strings.
+
+`npm test` currently passes 154/154 and `npm run build` passes.
 
 ## FUTURE — Reference tournament / golden master
 

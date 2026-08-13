@@ -474,3 +474,174 @@ test('the store\'s state is always plain JSON-serializable', () => {
   };
   walk(store.getState());
 });
+
+// ---------------------------------------------------------------------------
+// store.assignMatchTable() — M2J follow-up: COMMAND -> STORE -> ATOMIC
+// VALIDATED COMMIT. The characterized legacy table semantics themselves
+// (number/string, blank allowed, overwrite, done/cancelled still changeable,
+// no uniqueness enforcement) are already fully covered by
+// tests/tournament-commands.test.js against the pure command; these tests
+// focus on what the store adds: exposing it as a method, committing through
+// updateState(), and leaving everything else untouched.
+// ---------------------------------------------------------------------------
+
+const twoMatchRunningState = () => {
+  const p1 = createPlayer({ id: 1, name: 'Alpha', elo: 1600 });
+  const p2 = createPlayer({ id: 2, name: 'Bravo', elo: 1500 });
+  const p3 = createPlayer({ id: 3, name: 'Charlie', elo: 1550 });
+  const p4 = createPlayer({ id: 4, name: 'Delta', elo: 1450 });
+  const config = createConfig();
+  return createApplicationState({
+    tournament: createTournamentState({
+      config,
+      tournamentConfig: { title: 'Club Night', ...config },
+      players: [p1, p2, p3, p4],
+      roster: [p1, p2, p3, p4].map(({ id, name, elo }) => ({ id, name, elo })),
+      pendingPlayers: [{ id: 5, name: 'Echo (pending)', elo: 1400 }],
+      rounds: {
+        1: [
+          createMatch({ id: 1, p1, p2, r1: 4, r2: 2, done: true, tbl: 1, format: 'fixed_rack' }),
+          createMatch({ id: 2, p1: p3, p2: p4, r1: 0, r2: 0, done: false, tbl: 2, format: 'fixed_rack' })
+        ]
+      },
+      currentRound: 1
+    })
+  });
+};
+
+test('16: store.assignMatchTable() commits a successful table assignment', () => {
+  const store = createTournamentStore(twoMatchRunningState());
+  store.assignMatchTable({ roundNumber: 1, matchId: 1, table: 5 });
+  assert.equal(store.getState().tournament.rounds[1][0].tbl, 5);
+});
+
+test('17: store.assignMatchTable() overwrites an existing table assignment', () => {
+  const store = createTournamentStore(twoMatchRunningState());
+  assert.equal(store.getState().tournament.rounds[1][0].tbl, 1);
+  store.assignMatchTable({ roundNumber: 1, matchId: 1, table: 9 });
+  assert.equal(store.getState().tournament.rounds[1][0].tbl, 9);
+});
+
+test('18: store.assignMatchTable() accepts a blank \'\' table value unchanged', () => {
+  const store = createTournamentStore(twoMatchRunningState());
+  store.assignMatchTable({ roundNumber: 1, matchId: 1, table: '' });
+  assert.equal(store.getState().tournament.rounds[1][0].tbl, '');
+});
+
+test('19: store.assignMatchTable() preserves numeric and string table value types', () => {
+  const numberStore = createTournamentStore(twoMatchRunningState());
+  numberStore.assignMatchTable({ roundNumber: 1, matchId: 1, table: 7 });
+  assert.equal(typeof numberStore.getState().tournament.rounds[1][0].tbl, 'number');
+
+  const stringStore = createTournamentStore(twoMatchRunningState());
+  stringStore.assignMatchTable({ roundNumber: 1, matchId: 1, table: 'Court 7' });
+  assert.equal(typeof stringStore.getState().tournament.rounds[1][0].tbl, 'string');
+});
+
+test('20: a missing round throws and leaves store state unchanged', () => {
+  const store = createTournamentStore(twoMatchRunningState());
+  const before = store.getState();
+  assert.throws(() => store.assignMatchTable({ roundNumber: 99, matchId: 1, table: 5 }), /round 99 does not exist/);
+  assert.deepEqual(store.getState(), before);
+});
+
+test('21: a missing match throws and leaves store state unchanged', () => {
+  const store = createTournamentStore(twoMatchRunningState());
+  const before = store.getState();
+  assert.throws(() => store.assignMatchTable({ roundNumber: 1, matchId: 'does-not-exist', table: 5 }), /does not exist in round/);
+  assert.deepEqual(store.getState(), before);
+});
+
+test('22: an EMPTY application throws and leaves store state unchanged', () => {
+  const store = createTournamentStore(createApplicationState());
+  assert.throws(() => store.assignMatchTable({ roundNumber: 1, matchId: 1, table: 5 }), /no tournament/);
+  assert.deepEqual(store.getState(), { tournament: null, preAdvanceSnapshot: null });
+});
+
+test('23: only the requested match changes; players/roster/pendingPlayers/config/tournamentConfig are untouched', () => {
+  const store = createTournamentStore(twoMatchRunningState());
+  const before = store.getState();
+
+  store.assignMatchTable({ roundNumber: 1, matchId: 1, table: 42 });
+  const after = store.getState();
+
+  assert.equal(after.tournament.rounds[1][1].tbl, 2); // other match untouched
+  assert.deepEqual(after.tournament.players, before.tournament.players); // no recalculation
+  assert.deepEqual(after.tournament.roster, before.tournament.roster);
+  assert.deepEqual(after.tournament.pendingPlayers, before.tournament.pendingPlayers);
+  assert.deepEqual(after.tournament.config, before.tournament.config);
+  assert.deepEqual(after.tournament.tournamentConfig, before.tournament.tournamentConfig);
+});
+
+test('24: a preAdvanceSnapshot present on the store is not modified by assignMatchTable()', () => {
+  const p1 = createPlayer({ id: 1, name: 'Alpha', elo: 1600 });
+  const store = createTournamentStore(createApplicationState({
+    tournament: createTournamentState({
+      players: [p1],
+      roster: [{ id: 1, name: 'Alpha', elo: 1600 }],
+      rounds: { 1: [createMatch({ id: 1, p1: { id: 1, elo: 1600 }, p2: { id: 2, elo: 1500 }, r1: 4, r2: 2, done: true, tbl: 1 })] },
+      currentRound: 1
+    }),
+    preAdvanceSnapshot: createPreAdvanceSnapshot({
+      tournament: { players: [p1], totalRounds: 4 },
+      allRounds: { 1: [] },
+      currentRound: 1,
+      viewingRound: 1,
+      pendingPlayers: []
+    })
+  }));
+  const before = store.getState().preAdvanceSnapshot;
+
+  store.assignMatchTable({ roundNumber: 1, matchId: 1, table: 'New Table' });
+
+  assert.deepEqual(store.getState().preAdvanceSnapshot, before);
+});
+
+test('25: getState() isolation still holds after a table assignment', () => {
+  const store = createTournamentStore(twoMatchRunningState());
+  store.assignMatchTable({ roundNumber: 1, matchId: 1, table: 5 });
+
+  const first = store.getState();
+  first.tournament.rounds[1][0].tbl = 'mutated';
+  const second = store.getState();
+
+  assert.equal(second.tournament.rounds[1][0].tbl, 5);
+});
+
+test('26: store.assignMatchTable() works regardless of match format (14.1, and no format field at all)', () => {
+  const p1 = createPlayer({ id: 1, name: 'Alpha', elo: 1600 });
+  const p2 = createPlayer({ id: 2, name: 'Bravo', elo: 1500 });
+  const p3 = createPlayer({ id: 3, name: 'Charlie', elo: 1550 });
+  const store = createTournamentStore(createApplicationState({
+    tournament: createTournamentState({
+      players: [p1, p2, p3],
+      roster: [p1, p2, p3].map(({ id, name, elo }) => ({ id, name, elo })),
+      rounds: {
+        1: [
+          createMatch({ id: 1, p1, p2, done: true, tbl: 1, format: 'straight_pool_14_1', target: 30, p1Points: 30, p2Points: 16, innings: 9 }),
+          { id: 2, p1: { id: 1, elo: 1600 }, p2: { id: 3, elo: 1550 }, r1: 0, r2: 0, done: false, cancelled: false, bye: false, tbl: 2 } // no `format` at all
+        ]
+      },
+      currentRound: 1
+    })
+  }));
+
+  store.assignMatchTable({ roundNumber: 1, matchId: 1, table: 'A' });
+  store.assignMatchTable({ roundNumber: 1, matchId: 2, table: 'B' });
+
+  const state = store.getState();
+  assert.equal(state.tournament.rounds[1][0].tbl, 'A');
+  assert.equal(state.tournament.rounds[1][1].tbl, 'B');
+  assert.equal('format' in state.tournament.rounds[1][1], false); // still absent, not invented
+});
+
+test('27: a numeric roundNumber correctly locates a round whose canonical keys are (post-clone) strings', () => {
+  const store = createTournamentStore(twoMatchRunningState());
+  // The store clones through JSON on every read/write, so internally
+  // `tournament.rounds` keys are always strings (`Object.keys` on any plain
+  // object is always strings) — confirm a numeric roundNumber still resolves
+  // correctly via JS's implicit property-key coercion.
+  assert.deepEqual(Object.keys(store.getState().tournament.rounds), ['1']);
+  store.assignMatchTable({ roundNumber: 1, matchId: 1, table: 'Resolved' });
+  assert.equal(store.getState().tournament.rounds[1][0].tbl, 'Resolved');
+});
