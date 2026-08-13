@@ -64,9 +64,16 @@ import {
 //   EMPTY             tournamentConfig === null  -> canonical tournament: null
 //   CONFIGURED_PRE_START  tournamentConfig !== null, tournament === null
 //                     -> a canonical Tournament representing the configured-
-//                        but-not-yet-started event (see below)
+//                        but-not-yet-started event (see below), started: false
 //   RUNNING           tournament !== null -> canonical Tournament from the
-//                        running tournament's own players/totalRounds
+//                        running tournament's own players/totalRounds,
+//                        started: true
+//
+// `started` (M2K-A) is set explicitly per branch above — never inferred from
+// player/round counts — and represents the same started/not-started fact the
+// legacy app currently encodes implicitly as `tournament === null` versus
+// `tournament !== null`. It is a lifecycle marker only: it does not affect,
+// reset, or gate any other field this mapping produces.
 //
 // These are conceptual states derived from existing data for this mapping's
 // purposes only — no new persisted `status` field is introduced.
@@ -101,8 +108,9 @@ export const captureApplicationStateFromLegacy = ({
 } = {}) => {
   let canonicalTournament = null;
   if (tournament) {
-    // RUNNING
+    // RUNNING — legacy `tournament !== null` means Round 1 has started.
     canonicalTournament = createTournamentState({
+      started: true,
       config,
       tournamentConfig,
       players: tournament.players,
@@ -113,8 +121,10 @@ export const captureApplicationStateFromLegacy = ({
       totalRounds: tournament.totalRounds
     });
   } else if (tournamentConfig) {
-    // CONFIGURED_PRE_START
+    // CONFIGURED_PRE_START — legacy `tournament === null` means Round 1 has
+    // NOT started, even though the event is fully configured.
     canonicalTournament = createTournamentState({
+      started: false,
       config,
       tournamentConfig,
       players: [],

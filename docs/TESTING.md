@@ -215,6 +215,18 @@ are (post-JSON-clone) strings.
 
 `npm test` currently passes 154/154 and `npm run build` passes.
 
+## CURRENT — Tournament started lifecycle marker (M2K-A)
+
+The canonical `Tournament` shape now has a required boolean `started` field, explicitly preserving whether Round 1 has started — the same distinction the legacy application currently encodes implicitly as `tournament === null` (not started) versus `tournament !== null` (started). It is never inferred from player/round counts, `currentRound`, match existence, or `pendingPlayers`; `validateTournamentState()` rejects any non-null Tournament missing a boolean `started`. `createTournamentState()` deliberately assigns it no default (unlike every other field), so every call site — including all pre-existing tests — must state it explicitly. `src/application/legacyStateAdapter.js` sets it per legacy mode: `started: false` for CONFIGURED_PRE_START, `started: true` for RUNNING; EMPTY still maps to `tournament: null`. `src/application/tournamentStore.js` required no code changes — `started` is preserved automatically by its existing generic clone/validate boundary. `started` is a lifecycle marker only: it does not gate or reset any other pre-start state, and pre-start config/tournamentConfig/roster/pendingPlayers edits remain fully independent of it.
+
+`tests/tournament-model.test.js` (section H) covers: a Tournament with `started: false` validates, one with `started: true` validates, a non-null Tournament missing `started` is rejected, a non-boolean `started` is rejected, and JSON round-tripping preserves both `false` and `true` exactly.
+
+`tests/legacy-state-adapter.test.js` (section F, plus assertions added to the existing state-mode matrix) covers: EMPTY still maps to `tournament: null`, CONFIGURED_PRE_START maps to `started: false`, RUNNING maps to `started: true`, a RUNNING tournament restored via undo still maps to `started: true`, and `config`/`tournamentConfig` divergence survives independently of `started`.
+
+`tests/tournament-store.test.js` covers: the store accepting both a CONFIGURED_PRE_START (`started: false`) and a RUNNING (`started: true`) initial state, `getState()`/`replaceState()`/`updateState()` all preserving `started` across both modes, `assignMatchTable()` never changing `started`, an update that removes or corrupts `started` being rejected atomically (leaving the store's prior valid state unchanged), and pre-start editability: while `started: false`, a valid `updateState()` change to active `config`, to `tournamentConfig`, or to roster/`pendingPlayers` each commits successfully, leaves `started` at `false`, and leaves unrelated pre-start state untouched — proving pre-start state can evolve without starting or resetting the tournament.
+
+`npm test` currently passes 169/169 and `npm run build` passes.
+
 ## FUTURE — Reference tournament / golden master
 
 Not required to close M1. A completed historical tournament replayed end-to-end

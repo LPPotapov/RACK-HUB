@@ -17,6 +17,7 @@ const twoMatchState = (overrides = {}) => {
   const p4 = createPlayer({ id: 4, name: 'Delta', elo: 1450 });
   return createApplicationState({
     tournament: createTournamentState({
+      started: true,
       players: [p1, p2, p3, p4],
       roster: [p1, p2, p3, p4].map(({ id, name, elo }) => ({ id, name, elo })),
       rounds: {

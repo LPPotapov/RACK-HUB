@@ -25,6 +25,7 @@ test('2: creates a store with CONFIGURED_PRE_START state', () => {
   const config = createConfig();
   const applicationState = createApplicationState({
     tournament: createTournamentState({
+      started: false, // configured but Round 1 has not started
       config,
       tournamentConfig: { title: 'Friday Night Championship', ...config },
       players: [], // no accumulating participants yet — see M2H
@@ -36,6 +37,7 @@ test('2: creates a store with CONFIGURED_PRE_START state', () => {
   const store = createTournamentStore(applicationState);
   const state = store.getState();
   assert.notEqual(state.tournament, null);
+  assert.equal(state.tournament.started, false);
   assert.deepEqual(state.tournament.players, []);
   assert.equal(state.tournament.roster.length, 2);
   assert.equal(state.preAdvanceSnapshot, null);
@@ -46,6 +48,7 @@ test('3: creates a store with RUNNING state', () => {
   const p2 = createPlayer({ id: 2, name: 'Bravo', elo: 1586.72 });
   const applicationState = createApplicationState({
     tournament: createTournamentState({
+      started: true,
       players: [p1, p2],
       roster: [{ id: 1, name: 'Alpha', elo: 1600 }, { id: 2, name: 'Bravo', elo: 1500 }],
       rounds: { 1: [createMatch({ id: 1, p1, p2, r1: 4, r2: 2, done: true, format: 'fixed_rack' })] },
@@ -54,6 +57,7 @@ test('3: creates a store with RUNNING state', () => {
   });
   const store = createTournamentStore(applicationState);
   const state = store.getState();
+  assert.equal(state.tournament.started, true);
   assert.equal(state.tournament.players.length, 2);
   assert.equal(state.tournament.currentRound, 1);
 });
@@ -61,7 +65,8 @@ test('3: creates a store with RUNNING state', () => {
 test('4: creates a store with RUNNING state plus a preAdvanceSnapshot', () => {
   const p1 = createPlayer({ id: 1, name: 'Alpha', elo: 1600 });
   const applicationState = createApplicationState({
-    tournament: createTournamentState({ players: [p1], roster: [{ id: 1, name: 'Alpha', elo: 1600 }], rounds: {}, currentRound: 1 }),
+    tournament: createTournamentState({
+      started: true, players: [p1], roster: [{ id: 1, name: 'Alpha', elo: 1600 }], rounds: {}, currentRound: 1 }),
     preAdvanceSnapshot: createPreAdvanceSnapshot({
       tournament: { players: [p1], totalRounds: 4 },
       allRounds: { 1: [] },
@@ -91,7 +96,8 @@ test('5: invalid initial state is rejected', () => {
 
 test('6: getState returns an isolated copy on every call', () => {
   const store = createTournamentStore(createApplicationState({
-    tournament: createTournamentState({ players: [createPlayer({ id: 1, name: 'Alpha', elo: 1600 })], roster: [{ id: 1, name: 'Alpha', elo: 1600 }], rounds: {} })
+    tournament: createTournamentState({
+      started: true, players: [createPlayer({ id: 1, name: 'Alpha', elo: 1600 })], roster: [{ id: 1, name: 'Alpha', elo: 1600 }], rounds: {} })
   }));
   const first = store.getState();
   first.tournament.players[0].elo = 9999;
@@ -107,7 +113,8 @@ test('7: mutating the initial input after store creation does not mutate the sto
   const p1 = createPlayer({ id: 1, name: 'Alpha', elo: 1600 });
   const roster = [{ id: 1, name: 'Alpha', elo: 1600 }];
   const applicationState = createApplicationState({
-    tournament: createTournamentState({ players: [p1], roster, rounds: { 1: [] }, currentRound: 1 })
+    tournament: createTournamentState({
+      started: true, players: [p1], roster, rounds: { 1: [] }, currentRound: 1 })
   });
 
   const store = createTournamentStore(applicationState);
@@ -129,7 +136,8 @@ test('7: mutating the initial input after store creation does not mutate the sto
 test('8: replaceState accepts a valid state', () => {
   const store = createTournamentStore(createApplicationState());
   const next = createApplicationState({
-    tournament: createTournamentState({ players: [createPlayer({ id: 1, name: 'Alpha', elo: 1600 })], roster: [{ id: 1, name: 'Alpha', elo: 1600 }], rounds: {}, currentRound: 0 })
+    tournament: createTournamentState({
+      started: true, players: [createPlayer({ id: 1, name: 'Alpha', elo: 1600 })], roster: [{ id: 1, name: 'Alpha', elo: 1600 }], rounds: {}, currentRound: 0 })
   });
   store.replaceState(next);
   assert.notEqual(store.getState().tournament, null);
@@ -137,7 +145,8 @@ test('8: replaceState accepts a valid state', () => {
 
 test('9: replaceState rejects invalid state and leaves the previous valid state unchanged', () => {
   const valid = createApplicationState({
-    tournament: createTournamentState({ players: [createPlayer({ id: 1, name: 'Alpha', elo: 1600 })], roster: [{ id: 1, name: 'Alpha', elo: 1600 }], rounds: {}, currentRound: 0 })
+    tournament: createTournamentState({
+      started: true, players: [createPlayer({ id: 1, name: 'Alpha', elo: 1600 })], roster: [{ id: 1, name: 'Alpha', elo: 1600 }], rounds: {}, currentRound: 0 })
   });
   const store = createTournamentStore(valid);
 
@@ -152,7 +161,8 @@ test('10: mutating the replacement input after replaceState() does not mutate th
   const store = createTournamentStore(createApplicationState());
   const p1 = createPlayer({ id: 1, name: 'Alpha', elo: 1600 });
   const next = createApplicationState({
-    tournament: createTournamentState({ players: [p1], roster: [{ id: 1, name: 'Alpha', elo: 1600 }], rounds: {}, currentRound: 0 })
+    tournament: createTournamentState({
+      started: true, players: [p1], roster: [{ id: 1, name: 'Alpha', elo: 1600 }], rounds: {}, currentRound: 0 })
   });
   store.replaceState(next);
 
@@ -171,6 +181,7 @@ test('10: mutating the replacement input after replaceState() does not mutate th
 test('updateState: a successful update commits the returned state, and updater receives the current state', () => {
   const store = createTournamentStore(createApplicationState({
     tournament: createTournamentState({
+      started: true,
       players: [createPlayer({ id: 1, name: 'Alpha', elo: 1600 })],
       roster: [{ id: 1, name: 'Alpha', elo: 1600 }],
       rounds: {},
@@ -203,6 +214,7 @@ test('updateState: a successful update also works starting from a CONFIGURED_PRE
   const config = createConfig();
   const store = createTournamentStore(createApplicationState({
     tournament: createTournamentState({
+      started: false, // configured but Round 1 has not started
       config,
       tournamentConfig: { title: 'Not started yet', ...config },
       players: [],
@@ -225,6 +237,7 @@ test('updateState: a successful update also works starting from a CONFIGURED_PRE
 test('updateState: mutating the state argument inside updater does not affect the store until (unless) it commits', () => {
   const store = createTournamentStore(createApplicationState({
     tournament: createTournamentState({
+      started: true,
       players: [createPlayer({ id: 1, name: 'Alpha', elo: 1600 })],
       roster: [{ id: 1, name: 'Alpha', elo: 1600 }],
       rounds: {},
@@ -248,6 +261,7 @@ test('updateState: mutating the state argument inside updater does not affect th
 test('updateState: an updater returning undefined throws and leaves the previous valid state unchanged', () => {
   const store = createTournamentStore(createApplicationState({
     tournament: createTournamentState({
+      started: true,
       players: [createPlayer({ id: 1, name: 'Alpha', elo: 1600 })],
       roster: [{ id: 1, name: 'Alpha', elo: 1600 }],
       rounds: {},
@@ -265,6 +279,7 @@ test('updateState: an updater returning undefined throws and leaves the previous
 test('updateState: an updater returning a structurally invalid ApplicationState throws and leaves the previous valid state unchanged', () => {
   const store = createTournamentStore(createApplicationState({
     tournament: createTournamentState({
+      started: true,
       players: [createPlayer({ id: 1, name: 'Alpha', elo: 1600 })],
       roster: [{ id: 1, name: 'Alpha', elo: 1600 }],
       rounds: {},
@@ -282,6 +297,7 @@ test('updateState: an updater returning a structurally invalid ApplicationState 
 test('updateState: an updater that throws propagates the error and leaves store state unchanged', () => {
   const store = createTournamentStore(createApplicationState({
     tournament: createTournamentState({
+      started: true,
       players: [createPlayer({ id: 1, name: 'Alpha', elo: 1600 })],
       roster: [{ id: 1, name: 'Alpha', elo: 1600 }],
       rounds: {},
@@ -299,6 +315,7 @@ test('updateState: an updater that throws propagates the error and leaves store 
 test('updateState: mutating the object returned by updater after it commits does not mutate the store', () => {
   const store = createTournamentStore(createApplicationState({
     tournament: createTournamentState({
+      started: true,
       players: [createPlayer({ id: 1, name: 'Alpha', elo: 1600 })],
       roster: [{ id: 1, name: 'Alpha', elo: 1600 }],
       rounds: {},
@@ -347,7 +364,8 @@ test('11: getStandingsBeforeRound() delegates correctly for fixed-rack history',
     ]
   };
   const store = createTournamentStore(createApplicationState({
-    tournament: createTournamentState({ players, roster, rounds, currentRound: 2 })
+    tournament: createTournamentState({
+      started: true, players, roster, rounds, currentRound: 2 })
   }));
 
   const standings = store.getStandingsBeforeRound(3);
@@ -369,7 +387,8 @@ test('12: getStandingsBeforeRound() delegates correctly for GBR_14.1 experimenta
     })]
   };
   const store = createTournamentStore(createApplicationState({
-    tournament: createTournamentState({ config, players, roster, rounds, currentRound: 1 })
+    tournament: createTournamentState({
+      started: true, config, players, roster, rounds, currentRound: 1 })
   }));
 
   const standings = store.getStandingsBeforeRound(2);
@@ -384,7 +403,8 @@ test('13: getStandingsBeforeRound() does not mutate the store\'s state', () => {
   const roster = [{ id: 1, name: 'Alpha', elo: 1600 }, { id: 2, name: 'Bravo', elo: 1500 }];
   const rounds = { 1: [createMatch({ id: 1, p1: { id: 1, elo: 1600 }, p2: { id: 2, elo: 1500 }, r1: 4, r2: 2, done: true, format: 'fixed_rack' })] };
   const store = createTournamentStore(createApplicationState({
-    tournament: createTournamentState({ players, roster, rounds, currentRound: 1 })
+    tournament: createTournamentState({
+      started: true, players, roster, rounds, currentRound: 1 })
   }));
 
   const before = store.getState();
@@ -402,6 +422,7 @@ test('getStandingsBeforeRound() returns an empty standings object for a CONFIGUR
   const config = createConfig();
   const store = createTournamentStore(createApplicationState({
     tournament: createTournamentState({
+      started: false, // configured but Round 1 has not started
       config,
       tournamentConfig: { title: 'Not started yet', ...config },
       players: [],
@@ -422,6 +443,7 @@ test('14: config/tournamentConfig divergence survives store ownership', () => {
   const liveConfig = createConfig({ d: 350 });
   const store = createTournamentStore(createApplicationState({
     tournament: createTournamentState({
+      started: true,
       config: liveConfig,
       tournamentConfig: { title: 'Club Night', ...setupConfig },
       players: [createPlayer({ id: 1, name: 'Alpha', elo: 1600 })],
@@ -438,6 +460,7 @@ test('14: config/tournamentConfig divergence survives store ownership', () => {
 test('15: roster/tournament.players distinction survives store ownership', () => {
   const store = createTournamentStore(createApplicationState({
     tournament: createTournamentState({
+      started: true,
       players: [createPlayer({ id: 1, name: 'Alpha', elo: 1600 })],
       roster: [{ id: 1, name: 'Alpha', elo: 1600 }, { id: 2, name: 'Bravo (pending)', elo: 1500 }],
       pendingPlayers: [{ id: 2, name: 'Bravo (pending)', elo: 1500 }],
@@ -457,6 +480,7 @@ test('15: roster/tournament.players distinction survives store ownership', () =>
 test('the store\'s state is always plain JSON-serializable', () => {
   const store = createTournamentStore(createApplicationState({
     tournament: createTournamentState({
+      started: true,
       players: [createPlayer({ id: 1, name: 'Alpha', elo: 1600 })],
       roster: [{ id: 1, name: 'Alpha', elo: 1600 }],
       rounds: { 1: [createMatch({ id: 1, p1: { id: 1, elo: 1600 }, p2: { id: 2, elo: 1500 }, r1: 4, r2: 2, done: true, format: 'fixed_rack' })] },
@@ -493,6 +517,7 @@ const twoMatchRunningState = () => {
   const config = createConfig();
   return createApplicationState({
     tournament: createTournamentState({
+      started: true,
       config,
       tournamentConfig: { title: 'Club Night', ...config },
       players: [p1, p2, p3, p4],
@@ -571,12 +596,14 @@ test('23: only the requested match changes; players/roster/pendingPlayers/config
   assert.deepEqual(after.tournament.pendingPlayers, before.tournament.pendingPlayers);
   assert.deepEqual(after.tournament.config, before.tournament.config);
   assert.deepEqual(after.tournament.tournamentConfig, before.tournament.tournamentConfig);
+  assert.equal(after.tournament.started, before.tournament.started); // table assignment never touches started
 });
 
 test('24: a preAdvanceSnapshot present on the store is not modified by assignMatchTable()', () => {
   const p1 = createPlayer({ id: 1, name: 'Alpha', elo: 1600 });
   const store = createTournamentStore(createApplicationState({
     tournament: createTournamentState({
+      started: true,
       players: [p1],
       roster: [{ id: 1, name: 'Alpha', elo: 1600 }],
       rounds: { 1: [createMatch({ id: 1, p1: { id: 1, elo: 1600 }, p2: { id: 2, elo: 1500 }, r1: 4, r2: 2, done: true, tbl: 1 })] },
@@ -614,6 +641,7 @@ test('26: store.assignMatchTable() works regardless of match format (14.1, and n
   const p3 = createPlayer({ id: 3, name: 'Charlie', elo: 1550 });
   const store = createTournamentStore(createApplicationState({
     tournament: createTournamentState({
+      started: true,
       players: [p1, p2, p3],
       roster: [p1, p2, p3].map(({ id, name, elo }) => ({ id, name, elo })),
       rounds: {
@@ -644,4 +672,165 @@ test('27: a numeric roundNumber correctly locates a round whose canonical keys a
   assert.deepEqual(Object.keys(store.getState().tournament.rounds), ['1']);
   store.assignMatchTable({ roundNumber: 1, matchId: 1, table: 'Resolved' });
   assert.equal(store.getState().tournament.rounds[1][0].tbl, 'Resolved');
+});
+
+// ---------------------------------------------------------------------------
+// started lifecycle preservation and pre-start editability (M2K-A)
+// ---------------------------------------------------------------------------
+
+test('28: getState/replaceState/updateState all preserve started across a RUNNING store', () => {
+  const p1 = createPlayer({ id: 1, name: 'Alpha', elo: 1600 });
+  const initial = createApplicationState({
+    tournament: createTournamentState({ started: true, players: [p1], roster: [{ id: 1, name: 'Alpha', elo: 1600 }], rounds: {}, currentRound: 1 })
+  });
+  const store = createTournamentStore(initial);
+  assert.equal(store.getState().tournament.started, true);
+
+  const replacement = createApplicationState({
+    tournament: createTournamentState({ started: true, players: [p1], roster: [{ id: 1, name: 'Alpha', elo: 1600 }], rounds: {}, currentRound: 2 })
+  });
+  store.replaceState(replacement);
+  assert.equal(store.getState().tournament.started, true);
+
+  store.updateState((current) => ({ ...current, tournament: { ...current.tournament, currentRound: 3 } }));
+  assert.equal(store.getState().tournament.started, true);
+  assert.equal(store.getState().tournament.currentRound, 3);
+});
+
+test('29: getState/replaceState/updateState all preserve started across a CONFIGURED_PRE_START store', () => {
+  const config = createConfig();
+  const initial = createApplicationState({
+    tournament: createTournamentState({
+      started: false,
+      config,
+      tournamentConfig: { title: 'Not started yet', ...config },
+      players: [],
+      roster: [{ id: 1, name: 'Alpha', elo: 1600 }],
+      rounds: {},
+      currentRound: 0
+    })
+  });
+  const store = createTournamentStore(initial);
+  assert.equal(store.getState().tournament.started, false);
+
+  store.replaceState(initial);
+  assert.equal(store.getState().tournament.started, false);
+
+  store.updateState((current) => ({ ...current, tournament: { ...current.tournament, pendingPlayers: [{ id: 2, name: 'Bravo', elo: 1500 }] } }));
+  assert.equal(store.getState().tournament.started, false);
+});
+
+test('30: an update that corrupts started (removes it or makes it non-boolean) is rejected atomically', () => {
+  const store = createTournamentStore(createApplicationState({
+    tournament: createTournamentState({ started: false, players: [], rounds: {}, currentRound: 0 })
+  }));
+
+  assert.throws(() => store.updateState((current) => {
+    const { started, ...tournamentWithoutStarted } = current.tournament;
+    return { ...current, tournament: tournamentWithoutStarted };
+  }), /invalid ApplicationState/);
+  assert.equal(store.getState().tournament.started, false);
+
+  assert.throws(() => store.updateState((current) => ({
+    ...current,
+    tournament: { ...current.tournament, started: 'not-a-boolean' }
+  })), /invalid ApplicationState/);
+  assert.equal(store.getState().tournament.started, false);
+});
+
+// PRE-START EDITABILITY: while started === false, the director must be able
+// to keep changing and saving current pre-start state (config,
+// tournamentConfig, roster, pendingPlayers, ...) without that being treated
+// as a reset/reload switch and without started itself changing as a
+// side effect. Nothing here reconstructs state from defaults just because
+// started is false — the current canonical state remains authoritative.
+
+test('31: while started: false, a valid update to active config commits and started remains false', () => {
+  const config = createConfig();
+  const store = createTournamentStore(createApplicationState({
+    tournament: createTournamentState({
+      started: false,
+      config,
+      tournamentConfig: { title: 'Friday Night Championship', ...config },
+      players: [],
+      roster: [{ id: 1, name: 'Alpha', elo: 1600 }],
+      rounds: {},
+      currentRound: 0
+    })
+  }));
+
+  store.updateState((current) => ({
+    ...current,
+    tournament: { ...current.tournament, config: { ...current.tournament.config, d: 400, max_games: 8 } }
+  }));
+
+  const state = store.getState();
+  assert.equal(state.tournament.started, false);
+  assert.equal(state.tournament.config.d, 400);
+  assert.equal(state.tournament.config.max_games, 8);
+  // tournamentConfig (the separate setup/display snapshot) is untouched by this edit.
+  assert.equal(state.tournament.tournamentConfig.title, 'Friday Night Championship');
+  assert.equal(state.tournament.roster.length, 1);
+});
+
+test('32: while started: false, a valid update to tournamentConfig commits and started remains false', () => {
+  const config = createConfig();
+  const store = createTournamentStore(createApplicationState({
+    tournament: createTournamentState({
+      started: false,
+      config,
+      tournamentConfig: { title: 'Friday Night Championship', ...config },
+      players: [],
+      roster: [{ id: 1, name: 'Alpha', elo: 1600 }],
+      rounds: {},
+      currentRound: 0
+    })
+  }));
+
+  store.updateState((current) => ({
+    ...current,
+    tournament: { ...current.tournament, tournamentConfig: { ...current.tournament.tournamentConfig, title: 'Saturday Night Championship' } }
+  }));
+
+  const state = store.getState();
+  assert.equal(state.tournament.started, false);
+  assert.equal(state.tournament.tournamentConfig.title, 'Saturday Night Championship');
+  // active config (a separate field) is untouched by this edit.
+  assert.equal(state.tournament.config.d, config.d);
+  assert.equal(state.tournament.roster.length, 1);
+});
+
+test('33: while started: false, roster/pending-player changes commit without toggling started or resetting other state', () => {
+  const config = createConfig();
+  const store = createTournamentStore(createApplicationState({
+    tournament: createTournamentState({
+      started: false,
+      config,
+      tournamentConfig: { title: 'Friday Night Championship', ...config },
+      players: [],
+      roster: [{ id: 1, name: 'Alpha', elo: 1600 }],
+      pendingPlayers: [],
+      rounds: {},
+      currentRound: 0
+    })
+  }));
+
+  store.updateState((current) => ({
+    ...current,
+    tournament: {
+      ...current.tournament,
+      roster: [...current.tournament.roster, { id: 2, name: 'Bravo', elo: 1500 }],
+      pendingPlayers: [...current.tournament.pendingPlayers, { id: 2, name: 'Bravo', elo: 1500 }]
+    }
+  }));
+
+  const state = store.getState();
+  assert.equal(state.tournament.started, false);
+  assert.equal(state.tournament.roster.length, 2);
+  assert.deepEqual(state.tournament.pendingPlayers, [{ id: 2, name: 'Bravo', elo: 1500 }]);
+  // Unrelated pre-start state (config/tournamentConfig/players) is untouched —
+  // nothing was rebuilt from defaults merely because started is false.
+  assert.equal(state.tournament.config.d, config.d);
+  assert.equal(state.tournament.tournamentConfig.title, 'Friday Night Championship');
+  assert.deepEqual(state.tournament.players, []);
 });

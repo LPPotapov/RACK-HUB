@@ -125,6 +125,7 @@
 //   {
 //     schemaVersion,             // see SCHEMA_VERSION below; added by this module, not present
 //                                 // on raw legacy autosave snapshots — see validation notes
+//     started,                    // boolean lifecycle fact (M2K-A) — see "started" below
 //     config,                     // Config, see above — the ACTIVE calculation settings
 //     tournamentConfig,            // { title, ...ConfigFields } — a SEPARATE setup/display
 //                                   // snapshot. NOT the same object as `config` and NOT
@@ -144,6 +145,44 @@
 //     totalRounds                    // tournament.totalRounds; fixed at creation from
 //                                      // config.default_rounds, not reassigned afterward today
 //   }
+//
+// started
+// -------
+// A boolean lifecycle fact, ADDITIVE to the model (M2K-A). It represents the
+// same distinction the legacy application currently encodes implicitly as
+// `tournament === null` (not started) versus `tournament !== null` (started) —
+// see legacyStateAdapter.js's EMPTY/CONFIGURED_PRE_START/RUNNING modes below.
+//   started === false -> Round 1 has NOT been officially started (this is the
+//                         CONFIGURED_PRE_START mapping's canonical Tournament).
+//   started === true  -> Round 1 HAS been started / the tournament is running
+//                         (this is the RUNNING mapping's canonical Tournament).
+// It is an explicit, authoritative fact — never inferred from player count,
+// round count, currentRound, match existence, or pendingPlayers. There is
+// intentionally no larger status enum (e.g. 'setup' | 'running' | ...); one
+// boolean is the approved scope for this task.
+//
+// `started` is a lifecycle marker ONLY, not a reset/reload switch. While
+// started === false, every other field on Tournament (config,
+// tournamentConfig, roster, pendingPlayers, rounds, currentRound,
+// totalRounds, ...) remains independently editable/preservable exactly like
+// any other pre-start state — nothing is rebuilt from defaults, and nothing
+// is discarded, merely because started is false. No code in this module (or
+// elsewhere in M2K-A) reconstructs state conditionally on `started`.
+//
+// createTournamentState() below deliberately does NOT default `started` —
+// unlike every other field on Tournament, there is no value that is "safe to
+// assume" here without silently hiding a caller's mistake (an omitted
+// `started` could otherwise silently misrepresent whether a real tournament
+// has actually started). Every call site must state it explicitly;
+// validateTournamentState() rejects a non-null Tournament missing a boolean
+// `started`. This is deliberately stricter than every other optional/
+// legacy-compatible field this module tolerates (see the Player/Match notes
+// above) — `started` is new authoritative state this task introduces, not a
+// legacy quirk being preserved.
+//
+// Starting Round 1 (the eventual `started: false` -> `started: true`
+// transition, and the corresponding command) is explicitly OUT OF SCOPE for
+// M2K-A — see docs/ARCHITECTURE.md.
 //
 // `config` vs `tournamentConfig` — CONFIRMED DIVERGENCE, both preserved:
 // createTournamentConfig() sets both `tournamentConfig` (`{title, ...settings}`)
@@ -326,7 +365,14 @@ export const createMatch = ({
 // `{title, ...config}` snapshot (matching createTournamentConfig()'s actual
 // construction) when not supplied, but callers should pass their own once
 // it's meant to diverge from `config`.
+//
+// `started` intentionally has NO default — see the "started" notes above.
+// Every caller must state it explicitly; an omitted `started` is left
+// `undefined` here (not silently coerced to true or false) so
+// validateTournamentState() catches it as missing, exactly like any other
+// caller mistake.
 export const createTournamentState = ({
+  started,
   config = createConfig(),
   tournamentConfig = { title: 'Untitled Tournament', ...config },
   players = [],
@@ -337,6 +383,7 @@ export const createTournamentState = ({
   totalRounds = config.default_rounds
 } = {}) => ({
   schemaVersion: SCHEMA_VERSION,
+  started,
   config,
   tournamentConfig,
   players,
@@ -379,12 +426,19 @@ const isPlainObject = (value) => typeof value === 'object' && value !== null && 
 // id types, and does NOT enforce anything about player counts/pairing
 // legality — those are round-lifecycle/pairing concerns, not state-shape
 // concerns. Returns a list of errors rather than throwing.
+//
+// `started` is the one exception to this permissiveness (M2K-A): it is
+// REQUIRED and must be a boolean on every non-null Tournament — there is no
+// legacy precedent to stay compatible with (it is new authoritative state,
+// not a preserved legacy quirk), so a missing/non-boolean value is always
+// rejected rather than tolerated.
 export const validateTournamentState = (state) => {
   const errors = [];
 
   if (!isPlainObject(state)) {
     return { valid: false, errors: ['tournament state must be a plain object'] };
   }
+  if (typeof state.started !== 'boolean') errors.push('started is required and must be a boolean');
   if (!isPlainObject(state.config)) errors.push('config is required and must be an object');
   if (!isPlainObject(state.tournamentConfig)) errors.push('tournamentConfig is required and must be an object');
   if (!Array.isArray(state.players)) errors.push('players must be an array');

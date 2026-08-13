@@ -21,6 +21,7 @@ test('a minimal current fixed-rack event is representable', () => {
   const p2 = createPlayer({ id: 2, name: 'Bravo', elo: 1500 });
   const config = createConfig();
   const state = createTournamentState({
+    started: true,
     tournamentConfig: { title: 'Club Night', ...config },
     config,
     players: [p1, p2],
@@ -47,6 +48,7 @@ test('a current GBR_14.1 experimental event is representable', () => {
   const p2 = createPlayer({ id: 2, name: 'Bravo', elo: 1500 });
   const config = createConfig({ format: 'straight_pool_14_1', straightPool: { enabled: true } });
   const state = createTournamentState({
+    started: true,
     tournamentConfig: { title: '14.1 Club Championship', ...config },
     config,
     players: [p1, p2],
@@ -76,6 +78,7 @@ test('JSON.parse(JSON.stringify(state)) preserves canonical tournament meaning',
   const p1 = createPlayer({ id: 1, name: 'Alpha', elo: 1600, opps: [2], mp: 1 });
   const p2 = createPlayer({ id: 2, name: 'Bravo', elo: 1500, opps: [1] });
   const state = createTournamentState({
+    started: true,
     players: [p1, p2],
     rounds: { 1: [createMatch({ id: 1, p1, p2, r1: 4, r2: 2, done: true, tbl: 1, format: 'fixed_rack' })] },
     currentRound: 1
@@ -95,6 +98,7 @@ test('legacy-optional fields (absent format, absent tbl, absent joinedRound) sur
   const p1 = { id: 1, name: 'Alpha', elo: 1600 }; // raw minimal roster-shape player, not createPlayer()
   const p2 = { id: 2, name: 'Bravo', elo: 1500 };
   const state = createTournamentState({
+    started: true,
     roster: [p1, p2],
     players: [createPlayer({ id: 1, name: 'Alpha', elo: 1600 }), createPlayer({ id: 2, name: 'Bravo', elo: 1500 })],
     // No `format` supplied — matches the Manual Pairing Editor's real stored shape exactly.
@@ -108,7 +112,7 @@ test('legacy-optional fields (absent format, absent tbl, absent joinedRound) sur
   // the `|| 1` fallback is a consumption-time concern (recalc/before-round),
   // not a construction-time requirement.
   const legacyPlayer = { id: 3, name: 'Charlie', elo: 1500, mp: 0, opps: [] };
-  const stateWithLegacyPlayer = createTournamentState({ players: [legacyPlayer], rounds: {} });
+  const stateWithLegacyPlayer = createTournamentState({ started: true, players: [legacyPlayer], rounds: {} });
   assert.equal('joinedRound' in stateWithLegacyPlayer.players[0], false);
   assert.deepEqual(validateTournamentState(stateWithLegacyPlayer), { valid: true, errors: [] });
 });
@@ -120,7 +124,7 @@ test('legacy-optional fields (absent format, absent tbl, absent joinedRound) sur
 test('numeric and string player ids remain distinct, never coerced', () => {
   const numericPlayer = createPlayer({ id: 1, name: 'Numeric', elo: 1600 });
   const stringPlayer = createPlayer({ id: '1', name: 'String', elo: 1600 });
-  const state = createTournamentState({ players: [numericPlayer, stringPlayer], rounds: {} });
+  const state = createTournamentState({ started: true, players: [numericPlayer, stringPlayer], rounds: {} });
 
   assert.equal(typeof state.players[0].id, 'number');
   assert.equal(typeof state.players[1].id, 'string');
@@ -165,7 +169,7 @@ test('match participant snapshots, target, table, and done/cancelled/bye flags a
 test('removed and joinedRound are representable exactly as current legacy semantics require', () => {
   const withdrawn = createPlayer({ id: 1, name: 'Withdrawn', elo: 1600, removed: true });
   const lateJoiner = createPlayer({ id: 2, name: 'Late', elo: 1500, joinedRound: 3 });
-  const state = createTournamentState({ players: [withdrawn, lateJoiner], rounds: {} });
+  const state = createTournamentState({ started: true, players: [withdrawn, lateJoiner], rounds: {} });
 
   assert.equal(state.players[0].removed, true);
   assert.equal(state.players[1].joinedRound, 3);
@@ -180,6 +184,7 @@ test('removed and joinedRound are representable exactly as current legacy semant
 
 test('the model contains no functions, class instances, Map/Set, or Date values', () => {
   const state = createTournamentState({
+    started: true,
     players: [createPlayer({ id: 1, name: 'Alpha', elo: 1600 })],
     rounds: { 1: [createMatch({ id: 1, p1: { id: 1, elo: 1600 }, p2: { id: 2, elo: 1500 }, done: true, format: 'fixed_rack' })] }
   });
@@ -210,6 +215,7 @@ test('validation accepts representative current-state examples, including quirky
   // at replay time, not construction time), and a match with no table
   // assignment yet.
   const state = createTournamentState({
+    started: true,
     players: [createPlayer({ id: 1, name: 'A', elo: 1600 }), createPlayer({ id: '2', name: 'B', elo: 1500 })],
     rounds: {
       1: [
@@ -223,6 +229,7 @@ test('validation accepts representative current-state examples, including quirky
 
 test('validation rejects only clearly malformed structural input', () => {
   const base = createTournamentState({
+    started: true,
     players: [createPlayer({ id: 1, name: 'A', elo: 1600 })],
     rounds: { 1: [createMatch({ id: 1, p1: { id: 1, elo: 1600 }, p2: { id: 2, elo: 1500 }, done: true, format: 'fixed_rack' })] }
   });
@@ -260,7 +267,7 @@ test('validation rejects only clearly malformed structural input', () => {
 // ---------------------------------------------------------------------------
 
 test('createTournamentState stamps the current schemaVersion', () => {
-  const state = createTournamentState({});
+  const state = createTournamentState({ started: true });
   assert.equal(state.schemaVersion, SCHEMA_VERSION);
   assert.equal(typeof SCHEMA_VERSION, 'number');
 });
@@ -275,6 +282,7 @@ test('A: config and tournamentConfig can diverge, and both survive independently
   // without touching `tournamentConfig` — a real current divergence.
   const liveConfig = createConfig({ d: 350, k_m: 25 });
   const state = createTournamentState({
+    started: true,
     tournamentConfig: { title: 'Original Title', ...setupConfig },
     config: liveConfig
   });
@@ -332,6 +340,7 @@ test('C: a production-style Manual Pairing Editor match (no format field) valida
   };
   assert.equal('format' in manualMatch, false);
   const state = createTournamentState({
+    started: true,
     players: [createPlayer({ id: 1, name: 'Alpha', elo: 1600 }), createPlayer({ id: 2, name: 'Bravo', elo: 1500 })],
     rounds: { 1: [manualMatch] }
   });
@@ -362,7 +371,7 @@ test('D: a production-style createPairings() match matches the actual current sh
   assert.equal(typeof automaticMatch.id, 'number');
   assert.equal(automaticMatch.format, 'fixed_rack');
   assert.equal(automaticMatch.tbl, 1);
-  const state = createTournamentState({ players: [p1, p2], rounds: { 1: [automaticMatch] } });
+  const state = createTournamentState({ started: true, players: [p1, p2], rounds: { 1: [automaticMatch] } });
   assert.deepEqual(validateTournamentState(state), { valid: true, errors: [] });
 });
 
@@ -373,6 +382,7 @@ test('D: a production-style createPairings() match matches the actual current sh
 test('E: a configured but not-yet-started tournament (before Round 1) is representable', () => {
   const config = createConfig();
   const state = createTournamentState({
+    started: false, // configured but Round 1 has not started
     tournamentConfig: { title: 'Friday Night Championship', ...config },
     config,
     players: [], // startTournament() has not run yet — tournament.players is still empty
@@ -402,7 +412,7 @@ test('F: a mid-nextRound() promoted player (missing rp/14.1 aggregates) validate
   };
   assert.equal('rp' in promotedPlayer, false);
   assert.equal('npd' in promotedPlayer, false);
-  const state = createTournamentState({ players: [promotedPlayer], rounds: {} });
+  const state = createTournamentState({ started: true, players: [promotedPlayer], rounds: {} });
   assert.deepEqual(validateTournamentState(state), { valid: true, errors: [] });
 });
 
@@ -456,4 +466,72 @@ test('G: a production-shaped PreAdvanceSnapshot (allRounds, not rounds) round-tr
 
   // An empty/never-advanced session (no undo available yet) is equally valid.
   assert.deepEqual(validateApplicationState(createApplicationState()), { valid: true, errors: [] });
+});
+
+// ---------------------------------------------------------------------------
+// H. started — explicit lifecycle fact (M2K-A)
+// ---------------------------------------------------------------------------
+//
+// started is NOT inferred from player/round counts, currentRound, match
+// existence, or pendingPlayers — it is only ever what the caller explicitly
+// states. These tests cover the contract at the construction/validation
+// layer only; the started: false -> true transition (starting Round 1) is
+// out of scope here.
+
+test('H1: a canonical Tournament with started: false validates', () => {
+  const state = createTournamentState({
+    started: false,
+    tournamentConfig: { title: 'Not started yet' },
+    players: [],
+    roster: [createPlayer({ id: 1, name: 'Alpha', elo: 1600 })],
+    rounds: {},
+    currentRound: 0
+  });
+  assert.equal(state.started, false);
+  assert.deepEqual(validateTournamentState(state), { valid: true, errors: [] });
+});
+
+test('H2: a canonical Tournament with started: true validates', () => {
+  const p1 = createPlayer({ id: 1, name: 'Alpha', elo: 1600 });
+  const p2 = createPlayer({ id: 2, name: 'Bravo', elo: 1500 });
+  const state = createTournamentState({
+    started: true,
+    players: [p1, p2],
+    rounds: { 1: [createMatch({ id: 1, p1, p2, r1: 4, r2: 2, done: true, format: 'fixed_rack' })] },
+    currentRound: 1
+  });
+  assert.equal(state.started, true);
+  assert.deepEqual(validateTournamentState(state), { valid: true, errors: [] });
+});
+
+test('H3: a non-null canonical Tournament missing started is rejected', () => {
+  const { started, ...withoutStarted } = createTournamentState({ started: true, players: [], rounds: {} });
+  assert.equal('started' in withoutStarted, false);
+  const result = validateTournamentState(withoutStarted);
+  assert.equal(result.valid, false);
+  assert.ok(result.errors.some((e) => e.includes('started')));
+});
+
+test('H4: a non-boolean started is rejected', () => {
+  const base = createTournamentState({ started: true, players: [], rounds: {} });
+  for (const badValue of ['true', 1, 0, null, undefined, {}]) {
+    const result = validateTournamentState({ ...base, started: badValue });
+    assert.equal(result.valid, false, `expected started: ${JSON.stringify(badValue)} to be rejected`);
+    assert.ok(result.errors.some((e) => e.includes('started')));
+  }
+});
+
+test('H5: JSON round-trip preserves started: false exactly', () => {
+  const state = createTournamentState({ started: false, players: [], rounds: {} });
+  const roundTripped = JSON.parse(JSON.stringify(state));
+  assert.equal(roundTripped.started, false);
+  assert.deepEqual(roundTripped, state);
+});
+
+test('H6: JSON round-trip preserves started: true exactly', () => {
+  const p1 = createPlayer({ id: 1, name: 'Alpha', elo: 1600 });
+  const state = createTournamentState({ started: true, players: [p1], rounds: { 1: [] }, currentRound: 1 });
+  const roundTripped = JSON.parse(JSON.stringify(state));
+  assert.equal(roundTripped.started, true);
+  assert.deepEqual(roundTripped, state);
 });

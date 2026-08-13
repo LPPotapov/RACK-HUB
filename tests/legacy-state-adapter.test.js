@@ -348,6 +348,8 @@ test('B: configured-but-not-started event (tournament === null, tournamentConfig
 
   assert.notEqual(state.tournament, null);
   assert.deepEqual(validateApplicationState(state), { valid: true, errors: [] });
+  // started: false — Round 1 has not started, even though the event is fully configured.
+  assert.equal(state.tournament.started, false);
   // Configuration and roster survive — this is the bug being fixed.
   assert.equal(state.tournament.tournamentConfig.title, 'Friday Night Championship');
   assert.equal(state.tournament.config.d, 330);
@@ -371,6 +373,7 @@ test('C: a running tournament maps its own players/totalRounds (unchanged from b
 
   const state = captureApplicationStateFromLegacy({ config, tournamentConfig, tournament, players: roster, allRounds: {}, currentRound: 1 });
 
+  assert.equal(state.tournament.started, true); // legacy tournament !== null -> started
   assert.equal(state.tournament.players.length, 2);
   assert.equal(state.tournament.totalRounds, 6); // from tournament.totalRounds, NOT config.default_rounds (4)
   assert.notEqual(state.tournament.totalRounds, config.default_rounds);
@@ -395,6 +398,7 @@ test('D: a running tournament with a preAdvanceSnapshot maps both independently'
 
   assert.notEqual(state.tournament, null);
   assert.notEqual(state.preAdvanceSnapshot, null);
+  assert.equal(state.tournament.started, true); // undo restores a RUNNING tournament, still started
   assert.equal(state.tournament.currentRound, 2);
   assert.equal(state.preAdvanceSnapshot.currentRound, 1);
   assert.equal(state.preAdvanceSnapshot.allRounds[1][0].r1, 4);
@@ -408,6 +412,37 @@ test('E: a running tournament with config/tournamentConfig divergence maps both 
 
   const state = captureApplicationStateFromLegacy({ config: liveConfig, tournamentConfig, tournament, players: [{ id: 1, name: 'Alpha', elo: 1600 }], allRounds: {}, currentRound: 1 });
 
+  assert.equal(state.tournament.started, true);
   assert.equal(state.tournament.config.d, 350);
   assert.equal(state.tournament.tournamentConfig.d, 330);
+});
+
+// ---------------------------------------------------------------------------
+// F. started lifecycle mapping (M2K-A) — dedicated coverage across all three
+// legacy modes, distinct from the state-mode matrix above.
+// ---------------------------------------------------------------------------
+
+test('F1: EMPTY legacy state still maps to tournament: null (started is not applicable)', () => {
+  const state = captureApplicationStateFromLegacy({});
+  assert.equal(state.tournament, null);
+});
+
+test('F2: CONFIGURED_PRE_START legacy state maps to started: false', () => {
+  const config = baseConfig();
+  const tournamentConfig = { title: 'Club Night', ...config };
+  const state = captureApplicationStateFromLegacy({
+    config, tournamentConfig, tournament: null, players: [{ id: 1, name: 'Alpha', elo: 1600 }], allRounds: {}, currentRound: 0
+  });
+  assert.notEqual(state.tournament, null);
+  assert.equal(state.tournament.started, false);
+});
+
+test('F3: RUNNING legacy state maps to started: true', () => {
+  const config = baseConfig();
+  const tournamentConfig = { title: 'Club Night', ...config };
+  const tournament = { players: [steadyStatePlayer(1, 'Alpha', 1600)], totalRounds: 4 };
+  const state = captureApplicationStateFromLegacy({
+    config, tournamentConfig, tournament, players: [{ id: 1, name: 'Alpha', elo: 1600 }], allRounds: {}, currentRound: 1
+  });
+  assert.equal(state.tournament.started, true);
 });
