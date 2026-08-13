@@ -977,3 +977,72 @@ test('41: an artificial pre-start store state whose prior round history marks ev
 
   assert.deepEqual(store.getState(), before);
 });
+
+// ---------------------------------------------------------------------------
+// store.recordMatchResult() (M2M-B) — the characterized legacy semantics
+// themselves are already fully covered by tests/record-match-result.test.js
+// against the pure command; these tests focus on what the store adds:
+// exposing it as a method, committing through updateState(), and atomicity.
+// ---------------------------------------------------------------------------
+
+const runningFixedRackStoreState = () => {
+  const config = createConfig();
+  const p1 = createPlayer({ id: 1, name: 'Alpha', elo: 1600 });
+  const p2 = createPlayer({ id: 2, name: 'Bravo', elo: 1500 });
+  return createApplicationState({
+    tournament: createTournamentState({
+      started: true,
+      config,
+      tournamentConfig: { title: 'Club Night', ...config },
+      players: [p1, p2],
+      roster: [{ id: 1, name: 'Alpha', elo: 1600 }, { id: 2, name: 'Bravo', elo: 1500 }],
+      rounds: { 1: [{ id: 1, p1: { id: 1, elo: 1600 }, p2: { id: 2, elo: 1500 }, r1: 0, r2: 0, done: false, cancelled: false, bye: false, tbl: 1, format: 'fixed_rack' }] },
+      currentRound: 1
+    })
+  });
+};
+
+test('42: store.recordMatchResult() commits a successful result and recalculates tournament.players', () => {
+  const store = createTournamentStore(runningFixedRackStoreState());
+  store.recordMatchResult({ roundNumber: 1, matchId: 1, r1: 4, r2: 2 });
+
+  const state = store.getState();
+  assert.equal(state.tournament.rounds[1][0].done, true);
+  assert.equal(state.tournament.players.find((p) => p.id === 1).mp, 1);
+});
+
+test('43: a failed store.recordMatchResult() (invalid total) throws and leaves store state completely unchanged', () => {
+  const store = createTournamentStore(runningFixedRackStoreState());
+  const before = store.getState();
+
+  assert.throws(() => store.recordMatchResult({ roundNumber: 1, matchId: 1, r1: 3, r2: 1 }), /total racks must equal/);
+
+  assert.deepEqual(store.getState(), before);
+});
+
+test('44: recording a result on a store with an EMPTY application throws and leaves store state unchanged', () => {
+  const store = createTournamentStore(createApplicationState());
+  assert.throws(() => store.recordMatchResult({ roundNumber: 1, matchId: 1, r1: 4, r2: 2 }), /no tournament/);
+  assert.deepEqual(store.getState(), { tournament: null, preAdvanceSnapshot: null });
+});
+
+test('45: getState() isolation still holds after recording a result', () => {
+  const store = createTournamentStore(runningFixedRackStoreState());
+  store.recordMatchResult({ roundNumber: 1, matchId: 1, r1: 4, r2: 2 });
+
+  const first = store.getState();
+  first.tournament.rounds[1][0].r1 = 999;
+  first.tournament.players[0].mp = 999;
+
+  const second = store.getState();
+  assert.notEqual(second.tournament.rounds[1][0].r1, 999);
+  assert.notEqual(second.tournament.players[0].mp, 999);
+});
+
+test('46: assignMatchTable() still works normally on a store after recordMatchResult()', () => {
+  const store = createTournamentStore(runningFixedRackStoreState());
+  store.recordMatchResult({ roundNumber: 1, matchId: 1, r1: 4, r2: 2 });
+  store.assignMatchTable({ roundNumber: 1, matchId: 1, table: 'Court 9' });
+
+  assert.equal(store.getState().tournament.rounds[1][0].tbl, 'Court 9');
+});

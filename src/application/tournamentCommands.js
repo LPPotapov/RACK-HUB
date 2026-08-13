@@ -14,6 +14,7 @@
 // operation.
 
 import { generatePairings as generatePairingsCommand } from '../domain/pairing.js';
+import { recalculateTournamentPlayers } from '../domain/tournamentRecalculation.js';
 
 // ---------------------------------------------------------------------------
 // assignMatchTable
@@ -286,6 +287,262 @@ export const startTournament = (applicationState, { seedMethod, manualSeeding = 
       totalRounds: tournament.config.default_rounds,
       rounds: { 1: matches },
       currentRound: 1
+    }
+  };
+};
+
+// ---------------------------------------------------------------------------
+// recordMatchResult
+// ---------------------------------------------------------------------------
+//
+// CURRENT legacy behavior this preserves exactly (verified by direct
+// inspection of PoolTournamentApp.jsx's completeMatch() and its surrounding
+// round-view input handlers before writing this — not assumed):
+//
+//   - Legacy is a TWO-STEP flow: per-field `<input onChange>` handlers write
+//     raw parsed-integer values directly onto the match (r1/r2, or
+//     p1Points/p2Points/innings/p1HighRun/p2HighRun) as the director types,
+//     completely unvalidated; completeMatch(roundNum, matchId) then reads
+//     WHATEVER is currently stored on the match, validates it, finalizes it,
+//     and sets `done: true`. This command COLLAPSES that into one atomic
+//     step — the caller supplies the candidate result values directly as
+//     command arguments (playing the role the staged match fields played in
+//     legacy) and this command performs the exact same
+//     validate-then-finalize-then-recalculate logic completeMatch() does,
+//     in one call. This is a call-shape change only (matching M2K-B/M2L's
+//     "collapse the UI's staged mutation into one command" precedent), not
+//     a behavior change: the same inputs produce the same validation
+//     outcome and the same final stored fields.
+//   - completeMatch() dispatches purely on the EXISTING match's stored
+//     `format` field (`match.format === 'straight_pool_14_1'`), never on
+//     which arguments the caller happened to pass — this command does the
+//     same. Fixed-rack and format-less matches (Manual Pairing Editor
+//     matches never set `format` at all — see tournamentModel.js) both take
+//     the fixed-rack branch, exactly like completeMatch().
+//   - completeMatch() has NO precondition on the match's PRIOR `done` value
+//     — it is called identically for first entry (`done: false`) and for
+//     correction (`done: true`, reopened only so the UI's conditionally-
+//     rendered inputs become editable again via the "Edit Score" button,
+//     which itself does nothing but flip `done` back to `false` — no result
+//     field is touched by that reopen). Since this command receives the
+//     candidate values directly as arguments rather than reading a
+//     mutable staged match field, it needs no reopen step at all: it can be
+//     called identically whether the match is currently `done: false`
+//     (initial entry) or `done: true` (correction) — both produce the exact
+//     same validate → finalize → `done: true` → recalculate outcome.
+//
+//   CORRECTED NUMERIC INPUT CONTRACT (follow-up fix, not a legacy-parity
+//   characterization): legacy's real end-to-end pipeline is actually
+//   THREE-part, not two — the `<input onChange>` handlers stage values via
+//   `parseInt(e.target.value) || 0` (an INTEGER-producing parse) BEFORE they
+//   ever land on the match; completeMatch()'s own `Number(x) || 0` re-parse
+//   only ever runs against those already-integer staged values, so it is a
+//   redundant no-op in practice — legacy can never actually persist a
+//   fractional score. The first version of this command mirrored only
+//   completeMatch()'s redundant `Number(x) || 0` re-parse and skipped the
+//   staging step's integer-producing parse entirely, which meant a caller
+//   passing a raw decimal (e.g. `r1: 4.9, r2: 1.1`) would pass through
+//   uncoerced (`Number(4.9) || 0` is `4.9`, not `0` — `||` only replaces
+//   FALSY values, and a non-zero decimal is truthy) and could satisfy the
+//   total-racks check by sheer arithmetic coincidence (`4.9 + 1.1 === 6`),
+//   producing a stored fractional result no legacy code path could ever
+//   create. This is a genuine command-design defect, not an intentional
+//   legacy behavior to preserve — legacy's UI never lets a decimal reach
+//   completeMatch() at all. The fix: this command now REQUIRES every
+//   authoritative result argument (`r1`, `r2`, `p1Points`, `p2Points`,
+//   `innings`, `p1HighRun`, `p2HighRun`) to already be a finite integer
+//   JavaScript number (`Number.isInteger(value)` — true only for an actual
+//   `number`-typed, non-NaN, non-Infinite, whole value; false for every
+//   numeric string, decimal, `NaN`, `Infinity`, `null`/`undefined`, or
+//   object/array) and throws a clear, distinct error otherwise. There is no
+//   `Number(...)` coercion and no `parseInt(...)` anywhere in this command
+//   — integer-staging is now the CALLER's responsibility (exactly mirroring
+//   what legacy's own `<input onChange>` handlers already do before
+//   completeMatch() ever runs), not this command's. This restriction
+//   applies ONLY to numeric result fields — it has no effect on
+//   `assignMatchTable()`, which continues to accept any current-compatible
+//   `table` value (number, string, or blank) unchanged.
+//
+//   FIXED-RACK (approved writable fields: r1, r2, done):
+//     - rejects (throws) unless both `r1` and `r2` are finite integers (see
+//       "CORRECTED NUMERIC INPUT CONTRACT" above).
+//     - rejects (throws) if `r1 === 0 && r2 === 0` — "at least one score"
+//       must be entered, matching completeMatch()'s exact guard.
+//     - auto-complete: if exactly one of r1/r2 is 0 and the other is > 0,
+//       the zero side is computed as `config.max_games - <entered side>` —
+//       exactly like completeMatch(). If both are already non-zero (a
+//       correction re-supplying both sides), no auto-complete is applied.
+//     - rejects (throws) unless the finalized r1+r2 === config.max_games
+//       exactly — the current fixed-rack race-to-N total-racks constraint.
+//     - on success: r1/r2 are set to the finalized values, `done: true`.
+//
+//   14.1 (approved writable fields: p1Points, p2Points, innings, p1HighRun,
+//   p2HighRun, r1, r2 — mirrored, done):
+//     - rejects (throws) unless ALL FIVE numeric fields (`p1Points`,
+//       `p2Points`, `innings`, `p1HighRun`, `p2HighRun`) are finite integers
+//       (see "CORRECTED NUMERIC INPUT CONTRACT" above) — checked before any
+//       of completeMatch()'s own business-rule validation below.
+//     - rejects (throws) if both points are 0, if innings <= 0, if either
+//       high run is negative, or if either player's high run exceeds their
+//       own points — matching completeMatch()'s four validation checks
+//       exactly, in the same order.
+//     - the "TD override" 20-inning/under-target completion path is a
+//       `console.warn` only in legacy — no state effect, no rejection — so
+//       it has no observable behavior to reproduce here (see this file's
+//       header note on non-observable diagnostic output).
+//     - on success: p1Points/p2Points/innings/p1HighRun/p2HighRun are set
+//       to the supplied integer values as-is, AND r1/r2 are set equal to
+//       p1Points/p2Points — "kept mirrored for compatibility with any
+//       legacy reads", quoting completeMatch()'s own comment — `done: true`.
+//     - `target` is NEVER written by this command in either branch —
+//       completeMatch() only READS `match.target` (for the TD-override
+//       warning) and never assigns it; a stored historical target is
+//       structural match data, not a result field (see
+//       tournamentRecalculation.js's own target-handling notes). Confirmed
+//       preserved by a dedicated test.
+//
+//   Bye matches: current legacy renders NO score input at all for a bye
+//   (`!m.bye` gates the very existence of the r1/r2 and 14.1 input fields,
+//   not merely their enabled state — unlike the table-assignment precedent,
+//   where the input exists but is only cosmetically `disabled`). There is
+//   no legacy code path that ever writes a result onto a bye match; the
+//   only bye-specific action is "Cancel FREILOS" (cancellation, not result
+//   entry — explicitly out of scope here). This command therefore rejects
+//   (throws) a bye match explicitly, with a clear message, rather than
+//   letting it fall through to the generic "no score entered" rejection
+//   that would incidentally also catch it (a bye's fields are always
+//   zeroed) — this is a message-clarity choice only; the observable
+//   outcome (rejected, no state change) is identical either way.
+//
+//   Cancelled matches: completeMatch() itself has NO `cancelled` guard —
+//   nothing in its code checks `match.cancelled` before validating/writing.
+//   The UI's "Complete" button simply stops rendering once `m.cancelled` is
+//   true, which is a presentation restriction, not a data-layer rule —
+//   exactly the same "UI attribute vs. state reality" distinction already
+//   established for `assignMatchTable()`'s table-input `disabled`
+//   attribute. This command mirrors the data-layer reality: it does NOT
+//   guard on `cancelled` either. This is harmless in practice —
+//   `recalculateTournamentPlayers()` already unconditionally skips any
+//   `cancelled: true` match regardless of `done` (see
+//   tournamentRecalculation.js), so recording a result on a cancelled match
+//   writes the fields but never affects derived player statistics (proven
+//   by a dedicated test).
+//
+//   Lifecycle: requires a real RUNNING tournament (`tournament !== null`,
+//   `started === true`) — completeMatch() is only ever reachable from the
+//   round view, which itself requires an active tournament; there is no
+//   legacy path to enter a result before Round 1 exists. EMPTY and
+//   CONFIGURED_PRE_START (`started: false`) are both rejected.
+//
+//   Round/match lookup: same pattern and atomicity as `assignMatchTable()`
+//   above — throws a clear, distinct error for a missing round or a missing
+//   match (strict `===` match-id equality, matching current lookup
+//   semantics throughout this codebase); a numeric `roundNumber` resolves
+//   correctly against `tournament.rounds`'s (possibly JSON-stringified)
+//   string keys via JS's own property-access coercion.
+//
+// After computing the updated match, this command calls
+// `recalculateTournamentPlayers()` (src/domain/tournamentRecalculation.js)
+// with the tournament's current `players`/`roster`/`currentRound`/`config`
+// and the UPDATED `rounds` — no recalculation logic is duplicated here.
+// `rounds` (every match, every round, including everything this command did
+// NOT touch) is otherwise passed through completely unchanged: no pairing
+// module is invoked, no match is added/removed/reordered, and no other
+// match's p1/p2/tbl/target/format/id/bye/done/cancelled fields are altered
+// — matching the hard product rule that recalculation never re-pairs.
+export const recordMatchResult = (applicationState, { roundNumber, matchId, r1, r2, p1Points, p2Points, innings, p1HighRun, p2HighRun } = {}) => {
+  const tournament = applicationState?.tournament;
+  if (!tournament) {
+    throw new Error('recordMatchResult: no tournament in this ApplicationState (application is EMPTY)');
+  }
+  if (tournament.started !== true) {
+    throw new Error('recordMatchResult: tournament has not started yet (started must be true)');
+  }
+
+  const round = tournament.rounds[roundNumber];
+  if (!round) {
+    throw new Error(`recordMatchResult: round ${roundNumber} does not exist`);
+  }
+
+  const matchIndex = round.findIndex((m) => m.id === matchId);
+  if (matchIndex === -1) {
+    throw new Error(`recordMatchResult: match ${matchId} does not exist in round ${roundNumber}`);
+  }
+
+  const match = round[matchIndex];
+  if (match.bye) {
+    throw new Error('recordMatchResult: cannot record a result on a bye match');
+  }
+
+  let resultFields;
+  if (match.format === 'straight_pool_14_1') {
+    if (!Number.isInteger(p1Points) || !Number.isInteger(p2Points) || !Number.isInteger(innings)
+      || !Number.isInteger(p1HighRun) || !Number.isInteger(p2HighRun)) {
+      throw new Error('recordMatchResult: p1Points, p2Points, innings, p1HighRun, and p2HighRun must all be finite integers');
+    }
+    const PA = p1Points;
+    const PB = p2Points;
+    const inn = innings;
+    const HRA = p1HighRun;
+    const HRB = p2HighRun;
+
+    if (PA === 0 && PB === 0) {
+      throw new Error('recordMatchResult: please enter points for at least one player');
+    }
+    if (inn <= 0) {
+      throw new Error('recordMatchResult: innings must be a positive number');
+    }
+    if (HRA < 0 || HRB < 0) {
+      throw new Error('recordMatchResult: high runs must be non-negative');
+    }
+    if ((PA > 0 && HRA > PA) || (PB > 0 && HRB > PB)) {
+      throw new Error("recordMatchResult: a high run cannot exceed that player's points");
+    }
+
+    resultFields = { p1Points: PA, p2Points: PB, innings: inn, p1HighRun: HRA, p2HighRun: HRB, r1: PA, r2: PB, done: true };
+  } else {
+    if (!Number.isInteger(r1) || !Number.isInteger(r2)) {
+      throw new Error('recordMatchResult: r1 and r2 must both be finite integers');
+    }
+    const enteredR1 = r1;
+    const enteredR2 = r2;
+
+    if (enteredR1 === 0 && enteredR2 === 0) {
+      throw new Error('recordMatchResult: please enter at least one score');
+    }
+
+    let finalR1 = enteredR1;
+    let finalR2 = enteredR2;
+    if (enteredR1 === 0 && enteredR2 > 0) {
+      finalR1 = tournament.config.max_games - enteredR2;
+    } else if (enteredR2 === 0 && enteredR1 > 0) {
+      finalR2 = tournament.config.max_games - enteredR1;
+    }
+
+    if (finalR1 + finalR2 !== tournament.config.max_games) {
+      throw new Error(`recordMatchResult: invalid score! total racks must equal ${tournament.config.max_games}`);
+    }
+
+    resultFields = { r1: finalR1, r2: finalR2, done: true };
+  }
+
+  const updatedRound = round.map((m, i) => (i === matchIndex ? { ...m, ...resultFields } : m));
+  const updatedRounds = { ...tournament.rounds, [roundNumber]: updatedRound };
+
+  const recalculatedPlayers = recalculateTournamentPlayers({
+    players: tournament.players,
+    roster: tournament.roster,
+    rounds: updatedRounds,
+    currentRound: tournament.currentRound,
+    config: tournament.config
+  });
+
+  return {
+    ...applicationState,
+    tournament: {
+      ...tournament,
+      rounds: updatedRounds,
+      players: recalculatedPlayers
     }
   };
 };

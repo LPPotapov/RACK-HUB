@@ -1,16 +1,44 @@
-// Full-history tournament recalculation (M2M-A): a pure extraction of
-// PoolTournamentApp.jsx's recalc() — the function that reconstructs every
-// current tournament.players entry's derived numeric truth (MP, GBR, PERF,
-// racks, RP, 14.1 aggregates) by replaying stored round history from each
-// player's starting GBR. Not a redesign — every behavior below (including
-// its known quirks) matches recalc() verified by direct source inspection,
-// not assumption.
+// Full-history tournament recalculation (M2M-A, corrected M2M-B follow-up):
+// a pure extraction of PoolTournamentApp.jsx's recalc() — the function that
+// reconstructs every current tournament.players entry's derived numeric
+// truth (MP, GBR, PERF, racks, RP, 14.1 aggregates) by replaying stored
+// round history from each player's starting GBR. Every behavior below
+// matches recalc(), verified by direct source inspection, not assumption —
+// with exactly ONE deliberate, director-confirmed exception: bye/FREILOS
+// "games" accrual (see "AUTHORITATIVE BYE / FREILOS RULE" below). That is a
+// canonical BBS-methodology correction, not a legacy-parity characterization
+// — legacy `recalc()`, `fixedRackBbs.js`'s `applyFixedRackMatch()`, and the
+// live `PoolTournamentApp.jsx` component are all untouched and still
+// increment games for a bye; only THIS module's replay differs, by explicit
+// product decision.
 //
 // HARD PRODUCT RULE: recalculation != re-pairing. `rounds` is a read-only
 // historical input here — this module never adds, removes, or reorders a
 // match, player snapshot, table assignment, or target. It only computes new
 // DERIVED numbers for `players`. A future "Rebuild Round X" (not
 // implemented) is the only thing allowed to regenerate pairings.
+//
+// =============================================================================
+// AUTHORITATIVE BYE / FREILOS RULE (director-confirmed, supersedes the
+// original M2M-A characterization's "games+1 for a bye")
+// =============================================================================
+//
+// A bye is NOT a played match — it compensates the player as if they had
+// received a win, for tournament-progression purposes only:
+//   MP:    +1 (matchPoints() with bye=true always returns 1, for either
+//          stored bye encoding — automatic r1:0/r2:0, or Manual Pairing
+//          Editor r1:max_games/r2:0)
+//   RP:    accrues normally — the per-round component PLUS the component
+//          for receiving 1 MP/a win, i.e. exactly
+//            rp_per_round + 1 * rp_per_mp
+//          (when config.use_rp is true; 0 when false, per the existing
+//          use_rp gate) — with NO positive-GBR-change RP component, because
+//          no GBR calculation occurs for a bye at all.
+//   Everything else is UNCHANGED by a bye: games, opponent history (opps),
+//   GBR (elo), PERF, perfCount, racksWon/racksLost, pointsFor/pointsAgainst,
+//   inningsTotal, npd, hs, hgd. FREILOS is never added to `opps`, in either
+//   format. This applies identically to a fixed-rack bye and a
+//   14.1-formatted bye — bye handling is not format-conditional.
 //
 // =============================================================================
 // CHARACTERIZATION (verified against PoolTournamentApp.jsx's recalc(), not
@@ -62,26 +90,33 @@
 // Per-match skip: a match is replayed only when `match.done && !match.cancelled`
 // — an incomplete (`done: false`) or cancelled match contributes nothing.
 //
-// Fixed-rack branch: delegates to `applyFixedRackMatch()` (fixedRackBbs.js)
-// — the SAME function recalc() itself calls — for both genuine fixed-rack
-// matches AND any match without `format` at all (Manual Pairing Editor
-// matches; recalc()'s format check is `match.format === 'straight_pool_14_1'`,
-// so an absent `format` always falls through to the fixed-rack path,
-// exactly like this module). `applyFixedRackMatch()` already reproduces
-// current bye semantics (+1 MP, no racks/GBR/PERF/opponent, RP still
-// accrues) and its own `done`/`cancelled` skip guard.
+// Bye dispatch: checked FIRST, before format — a bye is handled by this
+// module's own `applyByeMatch()` (see "AUTHORITATIVE BYE / FREILOS RULE"
+// above), identically for a fixed-rack bye and a 14.1-formatted bye.
+// `applyFixedRackMatch()` (fixedRackBbs.js) is never called for a bye from
+// this module anymore — that function's own internal bye branch (which
+// still gives +1 games, matching legacy `recalc()`) is intentionally
+// bypassed here; `applyFixedRackMatch()` itself is untouched, since legacy
+// `recalc()` still calls it directly for byes too.
 //
-// 14.1 branch (`match.format === 'straight_pool_14_1' && !match.bye`):
+// Fixed-rack branch (non-bye): delegates to `applyFixedRackMatch()`
+// (fixedRackBbs.js) — the SAME function recalc() itself calls — for both
+// genuine fixed-rack matches AND any match without `format` at all (Manual
+// Pairing Editor matches; recalc()'s format check is `match.format ===
+// 'straight_pool_14_1'`, so an absent `format` always falls through to the
+// fixed-rack path, exactly like this module).
+//
+// 14.1 branch (non-bye, `match.format === 'straight_pool_14_1'`):
 // computed via `straightPoolMatchOutcome()` (straightPool14_1.js — the same
 // pure function recalc() calls), reading `match.target` AS STORED ON THE
 // MATCH (never recomputed from current config — see "target" below), with
 // RP, `opps`, `pointsFor`/`pointsAgainst`/`inningsTotal`/`npd`/`hs`/`hgd`
 // accrued here exactly as recalc() accrues them inline (these are not part
 // of `straightPoolMatchOutcome()`'s own return value by design — see that
-// function's docstring). A 14.1-formatted BYE match does NOT take this
-// branch (`!match.bye` excludes it) — it falls through to the fixed-rack
-// bye path above instead, exactly like recalc(): a 14.1 bye gets +1 MP,
-// games+1, RP, and NOTHING ELSE (no 14.1 aggregate field is touched, no
+// function's docstring). A 14.1-formatted BYE match never reaches this
+// branch — the bye check above intercepts it first — so a 14.1 bye gets the
+// same `applyByeMatch()` treatment as a fixed-rack bye: +1 MP, RP, and
+// NOTHING ELSE (no 14.1 aggregate field is touched, no games increment, no
 // opponent added, FREILOS is never treated as a real opponent in either
 // format).
 //
@@ -128,7 +163,7 @@
 // calls return `undefined`, and the next property access throws a
 // TypeError — exactly like current recalc() would. No defensive fallback is
 // added; that would be inventing behavior legacy does not have.
-import { applyFixedRackMatch } from './fixedRackBbs.js';
+import { applyFixedRackMatch, matchPoints } from './fixedRackBbs.js';
 import { getSP, straightPoolMatchOutcome } from './straightPool14_1.js';
 
 const calcRoundRP = (matchPoints, eloChange, config) => {
@@ -203,6 +238,18 @@ const applyStraightPoolMatch = (players, match, config) => {
   });
 };
 
+// Applies a bye to the replay array under the AUTHORITATIVE canonical BBS
+// rule (director-confirmed, see this module's bye note above): +1 MP, the
+// normal round/win RP component, but NO games increment and no other
+// played-match effect. Handles both stored bye encodings identically
+// (matchPoints() always returns 1 when bye is true, regardless of the
+// sentinel r1/r2 values on either encoding).
+const applyByeMatch = (players, match, config) => {
+  const mpA = matchPoints(match.r1, match.r2, match.bye);
+  const rpA = calcRoundRP(mpA, 0, config); // no GBR-change component — no GBR calculation occurs for a bye
+  return players.map((p) => (p.id === match.p1.id ? { ...p, mp: p.mp + mpA, rp: p.rp + rpA } : p));
+};
+
 // recalculateTournamentPlayers({ players, roster, rounds, currentRound, config })
 // -> new players array
 //
@@ -238,7 +285,12 @@ export const recalculateTournamentPlayers = ({ players, roster, rounds, currentR
     roundMatches.forEach((match) => {
       if (!match.done || match.cancelled) return;
 
-      if (match.format === 'straight_pool_14_1' && !match.bye) {
+      if (match.bye) {
+        curr = applyByeMatch(curr, match, config);
+        return;
+      }
+
+      if (match.format === 'straight_pool_14_1') {
         curr = applyStraightPoolMatch(curr, match, config);
         return;
       }

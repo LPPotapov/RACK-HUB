@@ -31,6 +31,7 @@ The whitepaper defines, among other things:
 - Classic standings based on MP then PERF;
 - Rack Differential standings based on MP, then RD, then PERF;
 - byes worth 1 MP with no rack result, GBR change, or PERF contribution;
+- a bye/FREILOS is not a played match: it awards +1 MP and the normal RP compensation for participating in the round and receiving 1 MP/a win (the per-round RP component plus the win/MP RP component, with no positive-GBR-change RP component, since no GBR calculation occurs for a bye), but it does not affect GBR, PERF, `perfCount`, rack/point statistics, opponent history, or games-played (director-confirmed; see docs/ARCHITECTURE.md for the current canonical-vs-legacy implementation status of this rule);
 - repeated byes prohibited while an eligible player without a bye exists;
 - derived tournament statistics recalculated from match history when results change.
 

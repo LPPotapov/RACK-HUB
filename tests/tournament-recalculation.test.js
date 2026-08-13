@@ -212,7 +212,7 @@ test('a 14.1 match with no stored target falls back to sp.startTarget (matching 
 // 9-10. Byes
 // =============================================================================
 
-test('9: a fixed-rack bye grants +1 MP and games, but no racks/GBR/PERF/opponent; RP still accrues', () => {
+test('9: a fixed-rack bye grants +1 MP and the win/round RP component, but NO games increment and no racks/GBR/PERF/opponent (authoritative BBS rule — a bye is not a played match)', () => {
   const config = fixedConfig();
   const bye = { id: 1, p1: { id: 1, elo: 1600 }, p2: { id: 'bye', name: 'FREILOS', elo: 1300 }, r1: 0, r2: 0, done: true, cancelled: false, bye: true, format: 'fixed_rack' };
   const result = recalculateTournamentPlayers({
@@ -221,17 +221,43 @@ test('9: a fixed-rack bye grants +1 MP and games, but no racks/GBR/PERF/opponent
   });
   const a = result[0];
   assert.equal(a.mp, 1);
-  assert.equal(a.games, 1);
-  assert.equal(a.elo, 1600); // unchanged
+  assert.equal(a.games, 0); // NOT a played game
+  assert.equal(a.elo, 1600); // unchanged — no GBR calculation for a bye
   assert.equal(a.perf, 0);
   assert.equal(a.perfCount, 0);
   assert.equal(a.racksWon, 0);
   assert.equal(a.racksLost, 0);
   assert.deepEqual(a.opps, []); // FREILOS never becomes an opponent
+  assert.equal(a.rp, rpFormula(1, 0, config)); // rp_per_round + 1*rp_per_mp, no GBR-change component
+});
+
+test('a fixed-rack bye stored in the Manual Pairing Editor encoding (r1: max_games, r2: 0) is treated identically — MP/RP via matchPoints(), no games increment', () => {
+  const config = fixedConfig();
+  const bye = { id: 1, p1: { id: 1, elo: 1600 }, p2: { id: 'bye', name: 'FREILOS', elo: 1300 }, r1: config.max_games, r2: 0, done: true, cancelled: false, bye: true };
+  const result = recalculateTournamentPlayers({
+    players: [player(1, 'Alpha', 1600)], roster: roster([[1, 'Alpha', 1600]]),
+    rounds: { 1: [bye] }, currentRound: 1, config
+  });
+  const a = result[0];
+  assert.equal(a.mp, 1);
+  assert.equal(a.games, 0);
   assert.equal(a.rp, rpFormula(1, 0, config));
 });
 
-test('10: a 14.1-formatted bye takes the SAME generic bye path, not the 14.1 branch — no 14.1 aggregate field is touched', () => {
+test('a bye grants no RP when config.use_rp is false, while MP still increases by 1 and games still does not', () => {
+  const config = fixedConfig({ use_rp: false });
+  const bye = { id: 1, p1: { id: 1, elo: 1600 }, p2: { id: 'bye', name: 'FREILOS', elo: 1300 }, r1: 0, r2: 0, done: true, cancelled: false, bye: true, format: 'fixed_rack' };
+  const result = recalculateTournamentPlayers({
+    players: [player(1, 'Alpha', 1600)], roster: roster([[1, 'Alpha', 1600]]),
+    rounds: { 1: [bye] }, currentRound: 1, config
+  });
+  const a = result[0];
+  assert.equal(a.mp, 1);
+  assert.equal(a.games, 0);
+  assert.equal(a.rp, 0);
+});
+
+test('10: a 14.1-formatted bye takes the SAME dedicated bye path as fixed-rack — +1 MP, RP, no games, no 14.1 aggregate field touched', () => {
   const config = spConfig();
   const bye = { id: 1, p1: { id: 1, elo: 1600 }, p2: { id: 'bye', name: 'FREILOS', elo: 1300 }, r1: 0, r2: 0, done: true, cancelled: false, bye: true, format: 'straight_pool_14_1', target: 0 };
   const result = recalculateTournamentPlayers({
@@ -240,7 +266,8 @@ test('10: a 14.1-formatted bye takes the SAME generic bye path, not the 14.1 bra
   });
   const a = result[0];
   assert.equal(a.mp, 1);
-  assert.equal(a.games, 1);
+  assert.equal(a.games, 0);
+  assert.equal(a.rp, rpFormula(1, 0, config));
   assert.equal(a.pointsFor, 0);
   assert.equal(a.pointsAgainst, 0);
   assert.equal(a.inningsTotal, 0);
@@ -470,6 +497,25 @@ test('21b: 14.1 full recalculation is consistent with reconstructStandingsBefore
     assert.equal(p.npd, before.npd, `${p.name} npd`);
     assert.equal(p.hgd, before.hgd, `${p.name} hgd`);
   }
+});
+
+test('KNOWN, INTENTIONAL DIVERGENCE: for a bye, recalculateTournamentPlayers().games (corrected — no increment) now differs from reconstructStandingsBeforeRound().games (unchanged — still increments), by explicit director decision; MP itself still agrees', () => {
+  const config = fixedConfig();
+  const players = [player(1, 'Alpha', 1600), player(2, 'Bravo', 1500), player(3, 'Charlie', 1550)];
+  const rosterArg = players.map(({ id, name, elo }) => ({ id, name, elo }));
+  const rounds = {
+    1: [{ id: 1, p1: { id: 1, elo: 1600 }, p2: { id: 'bye', name: 'FREILOS', elo: 1300 }, r1: 0, r2: 0, done: true, cancelled: false, bye: true, format: 'fixed_rack' }]
+  };
+
+  const recalced = recalculateTournamentPlayers({ players, roster: rosterArg, rounds, currentRound: 1, config });
+  const beforeRound2 = reconstructStandingsBeforeRound({ players, startingRoster: rosterArg, rounds, roundLimit: 2, config });
+
+  const a = recalced.find((p) => p.id === 1);
+  const aBefore = beforeRound2[1];
+  assert.equal(a.mp, aBefore.mp); // MP agreement unaffected
+  assert.equal(a.games, 0); // corrected canonical rule: a bye is not a played game
+  assert.equal(aBefore.games, 1); // reconstructStandingsBeforeRound() is untouched — out of scope for this correction
+  assert.notEqual(a.games, aBefore.games); // the divergence itself, made explicit rather than silently reconciled
 });
 
 // =============================================================================
