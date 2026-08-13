@@ -322,7 +322,6 @@
 import React, { useState, useEffect } from 'react';
 import { Play, Edit, Trash2, UserPlus, UserMinus, Table, RotateCw, User, Target, XCircle, Download } from 'lucide-react';
 import {
-  applyFixedRackMatch,
   classicStandingScore,
   compareFixedRackPairingOrder,
   compareFixedRackStandings,
@@ -337,7 +336,6 @@ import {
   calcNPD,
   calcStraightPoolSignals,
   normalizeWeights,
-  straightPoolMatchOutcome,
   assignStraightPoolTierTargets as assignStraightPoolTierTargetsPure,
   calcStraightPoolGbrChange as calcStraightPoolGbrChangePure,
   calcStraightPoolPerf as calcStraightPoolPerfPure,
@@ -347,6 +345,14 @@ import {
   isStraightPool as isStraightPoolFormat
 } from './domain/straightPool14_1.js';
 import { reconstructStandingsBeforeRound } from './domain/beforeRoundStandings.js';
+import { recalculateTournamentPlayers } from './domain/tournamentRecalculation.js';
+import { captureApplicationStateFromLegacy, projectApplicationStateToLegacy } from './application/legacyStateAdapter.js';
+import {
+  assignMatchTable as assignMatchTableCommand,
+  startTournament as startTournamentCommand,
+  recordMatchResult as recordMatchResultCommand,
+  advanceTournamentRound as advanceTournamentRoundCommand
+} from './application/tournamentCommands.js';
 
 const PoolTournamentApp = () => {
   // Configuration and state
@@ -690,37 +696,71 @@ const PoolTournamentApp = () => {
   };
 
   // Start tournament
-  const startTournament = () => {
-    let sortedPlayers = [...players];
-    
-    if (seedMethod === 'elo' || seedMethod === 'cross_elo') {
-      sortedPlayers.sort((a, b) => b.elo - a.elo);
-    } else if (seedMethod === 'random') {
-      sortedPlayers.sort(() => Math.random() - 0.5);
-    } else if (seedMethod === 'manual') {
-      sortedPlayers = manualSeeding.map(id => players.find(p => p.id === id)).filter(Boolean);
+  // ---------------------------------------------------------------------
+  // M3 — canonical application-layer wiring boundary.
+  //
+  // The canonical layer (src/application/*, src/domain/*) is now
+  // AUTHORITATIVE for: startTournament, table assignment, result entry/
+  // correction, and round advancement. Each wired handler below follows the
+  // same pattern: capture current legacy React state -> invoke one pure
+  // canonical command -> project the result back to the legacy shape ->
+  // push it into the existing useState setters. No business logic
+  // (pairing/BBS/recalculation) is duplicated here; these three helpers are
+  // pure plumbing over already-existing, already-tested exports.
+  //
+  // Legacy paths NOT wired this session (createPairings() call sites at
+  // performDeletePlayer/removePlayersFromRound/restorePlayer/regenerateRound/
+  // performApplyManualPairings, and match cancel/uncancel) are unchanged and
+  // continue to mutate allRounds/tournament/pendingPlayers directly, exactly
+  // as before — out of scope per the M3 task.
+  const captureCurrentLegacyState = () => captureApplicationStateFromLegacy({
+    config, tournamentConfig, tournament, players, pendingPlayers, allRounds, currentRound, preAdvanceSnapshot
+  });
+
+  // Pushes a canonical ApplicationState back into the existing legacy
+  // useState setters via projectApplicationStateToLegacy() — the single
+  // compatibility boundary every wired handler commits through.
+  const applyProjectedState = (canonicalState) => {
+    const legacy = projectApplicationStateToLegacy(canonicalState);
+    setTournamentConfig(legacy.tournamentConfig ?? null);
+    setPlayers(legacy.players ?? []);
+    setTournament(legacy.tournament);
+    setAllRounds(legacy.allRounds);
+    setCurrentRound(legacy.currentRound);
+    setPendingPlayers(legacy.pendingPlayers);
+    setPreAdvanceSnapshot(legacy.preAdvanceSnapshot || null);
+  };
+
+  const flashError = (message, ms = 4000) => {
+    setErrorMessage(message);
+    setTimeout(() => setErrorMessage(''), ms);
+  };
+
+  // Table assignment — wired through the canonical assignMatchTable()
+  // command (M3). `table` is passed through exactly as received from the
+  // <input> (a string) — table identifiers stay flexible (number/string/
+  // blank), never coerced.
+  const handleTableChange = (roundNum, matchId, table) => {
+    let canonical;
+    try {
+      canonical = assignMatchTableCommand(captureCurrentLegacyState(), { roundNumber: roundNum, matchId, table });
+    } catch (err) {
+      flashError(err.message.replace(/^assignMatchTable:\s*/, ''));
+      return;
     }
-    // Any other value: keeps players in current order
+    applyProjectedState(canonical);
+  };
 
-    const tournamentPlayers = sortedPlayers.map(p => ({
-      ...p,
-      mp: 0,
-      perf: 0,
-      games: 0,
-      opps: [],
-      removed: false,
-      joinedRound: 1  // Track which round the player joined
-    }));
-
-    setTournament({
-      players: tournamentPlayers,
-      totalRounds: config.default_rounds
-    });
-
-    const matches = createPairings(tournamentPlayers, 0, 1, seedMethod);
-    if (matches === null) { setShowByeError(true); return; } // no legal bye (§9.2)
-    setAllRounds({ 1: matches });
-    setCurrentRound(1);
+  const startTournament = () => {
+    let canonical;
+    try {
+      canonical = startTournamentCommand(captureCurrentLegacyState(), { seedMethod, manualSeeding, tableNumbers });
+    } catch (err) {
+      if (/no legal bye/i.test(err.message)) { setShowByeError(true); return; } // no legal bye (§9.2)
+      flashError(err.message.replace(/^startTournament:\s*/, ''));
+      return;
+    }
+    applyProjectedState(canonical);
     setViewingRound(1);
     setView('round');
   };
@@ -943,192 +983,48 @@ const PoolTournamentApp = () => {
     });
   };
 
-  // Complete match
+  // Complete match — wired through the canonical recordMatchResult() command
+  // (M3). The per-field <input onChange> handlers below already stage
+  // parseInt()'d integers directly onto the match (legacy's existing UI
+  // parsing boundary, preserved unchanged) — this reads whatever is
+  // currently staged and hands it straight to the canonical command, with
+  // no re-coercion, matching recordMatchResult()'s strict integer contract.
   const completeMatch = (roundNum, matchId) => {
-    const match = allRounds[roundNum].find(m => m.id === matchId);
+    const match = allRounds[roundNum]?.find(m => m.id === matchId);
+    if (!match) return;
 
-    // ---- v1.92: 14.1 experimental completion + validation ----
-    if (match && match.format === 'straight_pool_14_1') {
-      const PA = Number(match.p1Points) || 0;
-      const PB = Number(match.p2Points) || 0;
-      const inn = Number(match.innings) || 0;
-      const HRA = Number(match.p1HighRun) || 0;
-      const HRB = Number(match.p2HighRun) || 0;
-      const target = match.target || getSP().startTarget;
-
-      if (PA === 0 && PB === 0) {
-        setErrorMessage('Please enter points for at least one player');
-        setTimeout(() => setErrorMessage(''), 3000);
-        return;
-      }
-      if (inn <= 0) {
-        setErrorMessage('Innings must be a positive number');
-        setTimeout(() => setErrorMessage(''), 3000);
-        return;
-      }
-      if (HRA < 0 || HRB < 0) {
-        setErrorMessage('High runs must be non-negative');
-        setTimeout(() => setErrorMessage(''), 3000);
-        return;
-      }
-      if ((PA > 0 && HRA > PA) || (PB > 0 && HRB > PB)) {
-        setErrorMessage('A high run cannot exceed that player\'s points');
-        setTimeout(() => setErrorMessage(''), 4000);
-        return;
-      }
-      // TD override: time-limited 14.1 matches may end with neither reaching target
-      if (PA < target && PB < target) {
-        console.warn(`14.1: neither player reached target ${target} (TD override allowed for time-limited matches)`);
-      }
-
-      setAllRounds({
-        ...allRounds,
-        [roundNum]: allRounds[roundNum].map(m =>
-          m.id === matchId
-            ? { ...m, p1Points: PA, p2Points: PB, innings: inn, p1HighRun: HRA, p2HighRun: HRB,
-                // keep r1/r2 mirrored for compatibility with any legacy reads
-                r1: PA, r2: PB, done: true }
-            : m
-        )
-      });
-      recalc();
+    let canonical;
+    try {
+      const captured = captureCurrentLegacyState();
+      canonical = match.format === 'straight_pool_14_1'
+        ? recordMatchResultCommand(captured, {
+            roundNumber: roundNum, matchId,
+            p1Points: match.p1Points, p2Points: match.p2Points, innings: match.innings,
+            p1HighRun: match.p1HighRun, p2HighRun: match.p2HighRun
+          })
+        : recordMatchResultCommand(captured, { roundNumber: roundNum, matchId, r1: match.r1, r2: match.r2 });
+    } catch (err) {
+      flashError(err.message.replace(/^recordMatchResult:\s*/, ''));
       return;
     }
-
-    if (!match || (match.r1 === 0 && match.r2 === 0)) {
-      setErrorMessage('Please enter at least one score');
-      setTimeout(() => setErrorMessage(''), 3000);
-      return;
-    }
-
-    // Auto-complete logic: if only one score is entered, calculate the other as max_games - entered_score
-    let finalR1 = match.r1;
-    let finalR2 = match.r2;
-    
-    if (match.r1 === 0 && match.r2 > 0) {
-      // Only player 2 score entered, calculate player 1 score
-      finalR1 = config.max_games - match.r2;
-    } else if (match.r2 === 0 && match.r1 > 0) {
-      // Only player 1 score entered, calculate player 2 score
-      finalR2 = config.max_games - match.r1;
-    }
-
-    // Validate: total racks must equal max_games
-    if (finalR1 + finalR2 !== config.max_games) {
-      setErrorMessage(`Invalid score! Total racks must equal ${config.max_games}. Current: ${finalR1} + ${finalR2} = ${finalR1 + finalR2}`);
-      setTimeout(() => setErrorMessage(''), 4000);
-      return;
-    }
-
-    setAllRounds({
-      ...allRounds,
-      [roundNum]: allRounds[roundNum].map(m =>
-        m.id === matchId ? { ...m, r1: finalR1, r2: finalR2, done: true } : m
-      )
-    });
-
-    recalc();
+    applyProjectedState(canonical);
   };
 
-  // Recalculate tournament state
+  // Recalculate tournament state (M3: delegates to the canonical
+  // recalculateTournamentPlayers() domain function instead of a duplicate
+  // inline implementation — this is the ONE deliberate divergence point
+  // from the original recalc(): a bye no longer increments `games` here
+  // either, matching the director-confirmed authoritative bye/FREILOS rule
+  // canonical command already applies. Re-running this after a wired
+  // command's projected state lands is idempotent (same rounds/config in,
+  // same players out) — see tournamentRecalculation.js. Still the recalc
+  // authority for every NOT-yet-wired legacy path this session left alone
+  // (cancel/uncancel, manual pairings, delete/restore/regenerate).
   const recalc = () => {
     if (!tournament) return;
-
-    const startElos = {};
-    players.forEach(p => startElos[p.id] = p.elo);
-
-    let curr = tournament.players.map(p => ({
-      ...p,
-      mp: 0,
-      perf: 0,
-      elo: startElos[p.id] || p.elo,
-      games: 0,
-      perfCount: 0,
-      opps: [],
-      rp: 0,
-      racksWon: 0,   // Track racks won
-      racksLost: 0,  // Track racks lost
-      // v1.92: 14.1 experimental aggregates (always present, default 0)
-      pointsFor: 0,
-      pointsAgainst: 0,
-      inningsTotal: 0,
-      npd: 0,
-      hs: 0,
-      hgd: 0
-    }));
-
-    for (let round = 1; round <= currentRound; round++) {
-      const roundMatches = allRounds[round] || [];
-      roundMatches.forEach(match => {
-        if (match.done && !match.cancelled) {
-          // ---- v1.92: 14.1 experimental match accumulation. Per-match calculation
-          // (signals/PERF/GBR-change/NPD/GD) is the canonical domain formula from
-          // src/domain/straightPool14_1.js; RP and running-max (hs/hgd) accumulation
-          // stay here, same as they're not part of the pure per-match outcome. ----
-          if (match.format === 'straight_pool_14_1' && !match.bye) {
-            const p1Cur = curr.find(p => p.id === match.p1.id);
-            const p2Cur = curr.find(p => p.id === match.p2.id);
-            const g1 = p1Cur.elo, g2 = p2Cur.elo;
-            const PA = Number(match.p1Points) || 0;
-            const PB = Number(match.p2Points) || 0;
-            const inn = Number(match.innings) || 0;
-            const HRA = Number(match.p1HighRun) || 0;
-            const HRB = Number(match.p2HighRun) || 0;
-
-            const outcome = straightPoolMatchOutcome(g1, g2, {
-              p1Points: PA, p2Points: PB, innings: inn,
-              p1HighRun: HRA, p2HighRun: HRB, target: match.target
-            }, { d: config.d, k_m: config.k_m, sp: getSP() });
-
-            const rp1 = calcRoundRP(outcome.mpA, outcome.change);
-            const rp2 = calcRoundRP(outcome.mpB, -outcome.change);
-
-            curr = curr.map(p => {
-              if (p.id === match.p1.id) return {
-                ...p,
-                mp: p.mp + outcome.mpA,
-                perf: p.perf + outcome.perfA,
-                perfCount: p.perfCount + 1,
-                elo: p.elo + outcome.change,
-                games: p.games + 1,
-                opps: p.opps.includes(match.p2.id) ? p.opps : [...p.opps, match.p2.id],
-                rp: p.rp + rp1,
-                pointsFor: p.pointsFor + PA,
-                pointsAgainst: p.pointsAgainst + PB,
-                inningsTotal: p.inningsTotal + inn,
-                npd: p.npd + outcome.npdA,
-                hs: Math.max(p.hs, HRA),
-                hgd: Math.max(p.hgd, outcome.gdA)
-              };
-              if (p.id === match.p2.id) return {
-                ...p,
-                mp: p.mp + outcome.mpB,
-                perf: p.perf + outcome.perfB,
-                perfCount: p.perfCount + 1,
-                elo: p.elo - outcome.change,
-                games: p.games + 1,
-                opps: p.opps.includes(match.p1.id) ? p.opps : [...p.opps, match.p1.id],
-                rp: p.rp + rp2,
-                pointsFor: p.pointsFor + PB,
-                pointsAgainst: p.pointsAgainst + PA,
-                inningsTotal: p.inningsTotal + inn,
-                npd: p.npd + outcome.npdB,
-                hs: Math.max(p.hs, HRB),
-                hgd: Math.max(p.hgd, outcome.gdB)
-              };
-              return p;
-            });
-            return; // done with this 14.1 match
-          }
-
-          curr = applyFixedRackMatch(curr, match, config, calcRoundRP);
-        }
-      });
-    }
-
     setTournament({
       ...tournament,
-      players: curr
+      players: recalculateTournamentPlayers({ players: tournament.players, roster: players, rounds: allRounds, currentRound, config })
     });
   };
 
@@ -1805,6 +1701,13 @@ const PoolTournamentApp = () => {
   };
 
   // Next round
+  // Finish the current round and generate the next one — wired through the
+  // canonical advanceTournamentRound() command (M3). The completion/final-
+  // round pre-checks are kept as fast, exact-message local guards (avoids a
+  // round-trip through the canonical layer just to reproduce the same
+  // current-round-incomplete alert); everything past that point — standings,
+  // pending-player promotion, pairing, the undo snapshot — is entirely the
+  // canonical command's responsibility.
   const nextRound = () => {
     if (!(allRounds[currentRound] || []).every(m => m.done || m.cancelled)) {
       return alert('Complete all matches');
@@ -1814,93 +1717,17 @@ const PoolTournamentApp = () => {
       return;
     }
 
-    // SAVE SNAPSHOT BEFORE ADVANCING - allows emergency undo of round advance
-    setPreAdvanceSnapshot({
-      tournament: JSON.parse(JSON.stringify(tournament)),
-      allRounds: JSON.parse(JSON.stringify(allRounds)),
-      currentRound: currentRound,
-      viewingRound: viewingRound,
-      pendingPlayers: JSON.parse(JSON.stringify(pendingPlayers))
-    });
-
-    const next = currentRound + 1;
-
-    // Get current standings sorted by pairing order (format-aware: 14.1 uses the
-    // 14.1 comparator). tournament.players already carries full recalc standings.
-    let sorted = [...tournament.players]
-      .filter(p => !p.removed)
-      .map(p => ({
-        ...p,
-        avgPerf: p.perfCount > 0 ? p.perf / p.perfCount : 0
-      }))
-      .sort(comparePairingOrder);
-
-    // Splice in pending players based on their ELO vs existing players' avgPerf
-    const newTournamentPlayers = [];
-    
-    pendingPlayers.forEach(pendingPlayer => {
-      // Create tournament player object
-      const tournamentPlayer = {
-        id: pendingPlayer.id,
-        name: pendingPlayer.name,
-        elo: pendingPlayer.elo,
-        mp: 0,
-        perf: 0,
-        perfCount: 0,
-        games: 0,
-        racksWon: 0,
-        racksLost: 0,
-        opps: [],
-        removed: false,
-        joinedRound: next,
-        avgPerf: 0
-      };
-      
-      if (sorted.length === 0) {
-        // If no existing players, just add to the list
-        sorted.push(tournamentPlayer);
-      } else {
-        // Find the player with closest avgPerf to this pending player's ELO
-        let closestIndex = 0;
-        let closestDiff = Math.abs(sorted[0].avgPerf - pendingPlayer.elo);
-        
-        for (let i = 1; i < sorted.length; i++) {
-          const diff = Math.abs(sorted[i].avgPerf - pendingPlayer.elo);
-          if (diff < closestDiff) {
-            closestDiff = diff;
-            closestIndex = i;
-          }
-        }
-        
-        // Insert right after the closest match
-        sorted.splice(closestIndex + 1, 0, tournamentPlayer);
-      }
-      
-      newTournamentPlayers.push(tournamentPlayer);
-    });
-
-    // Create pairings from augmented seeding list FIRST. Do not advance round
-    // state or mutate tournament/pending until we know pairings are legal.
-    const matches = createPairings(sorted, 0, next);
-    if (matches === null) {
-      // No legal bye: show modal and leave tournament in its current (un-advanced)
-      // state — do not setCurrentRound/viewingRound, do not clear pendingPlayers,
-      // do not mutate tournament players.
-      setShowByeError(true);
+    let canonical;
+    try {
+      canonical = advanceTournamentRoundCommand(captureCurrentLegacyState(), { tableNumbers });
+    } catch (err) {
+      if (/no legal bye/i.test(err.message)) { setShowByeError(true); return; } // no legal bye (§9.2)
+      flashError(err.message.replace(/^advanceTournamentRound:\s*/, ''));
       return;
     }
-
-    // Pairings are valid — now commit the advance.
-    if (newTournamentPlayers.length > 0) {
-      setTournament({
-        ...tournament,
-        players: [...tournament.players, ...newTournamentPlayers]
-      });
-    }
-    setAllRounds({ ...allRounds, [next]: matches });
-    setCurrentRound(next);
+    const next = canonical.tournament.currentRound;
+    applyProjectedState(canonical);
     setViewingRound(next);
-    setPendingPlayers([]);
   };
 
   // Undo advance - revert to state before "Next Round" was pressed
@@ -3030,10 +2857,7 @@ const PoolTournamentApp = () => {
                           <input
                             type="text"
                             value={m.tbl}
-                            onChange={e => setAllRounds({
-                              ...allRounds,
-                              [viewingRound]: allRounds[viewingRound].map(x => x.id === m.id ? { ...x, tbl: e.target.value } : x)
-                            })}
+                            onChange={e => handleTableChange(viewingRound, m.id, e.target.value)}
                             className="w-24 px-2 py-1 bg-slate-600 text-white rounded text-center"
                             disabled={m.cancelled}
                           />
