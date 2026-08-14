@@ -5,7 +5,9 @@ import {
   assignKoTable,
   confirmKoTables,
   createCanalettoEvent,
+  getBlockStatus,
   getKoGbrWeight,
+  getTop16Status,
   lockBlock,
   recordBlockMatchResult,
   recordKoResult,
@@ -264,4 +266,125 @@ test('per-match manual stream score stays independent of official score across t
   const roundTrippedMatch = roundTrippedPrivate.ko.top16.matches.find((m) => m.matchNumber === koMatch.matchNumber);
   assert.equal(roundTrippedMatch.r1, 7);
   assert.equal(roundTrippedMatch.r2, 2);
+});
+
+// ---------------------------------------------------------------------------
+// Fresh-empty-tournament hotfix regression suite (item 11, A-I). Items B, C,
+// F are genuinely useCanalettoCloudMirror.js HOOK behaviors (no React
+// testing harness exists in this repo — every other hook here is tested the
+// same way, only via its pure dependencies) — verified by direct code
+// inspection of that file's inbound/outbound effects, and exercised here
+// through the exact pure preconditions those effects are built on.
+// ---------------------------------------------------------------------------
+
+// A) director app remains usable when privateState/publicState/live are all null.
+test('(A) when the cloud is completely empty, the codec never fabricates an event, and the local/default event both stay fully functional', () => {
+  assert.equal(decodeEventFromCloud(null), null);
+  assert.equal(decodePublicStateFromCloud(null), null);
+  // The director app's OWN local event (untouched by any of this) remains
+  // completely normal and usable — e.g. every nav-status query the app
+  // calls unconditionally on every render keeps working.
+  const local = createCanalettoEvent();
+  assert.equal(getTop16Status(local), 'WAITING_FOR_BOTH');
+  assert.equal(getBlockStatus(local, 'A'), 'NOT_STARTED');
+  assert.equal(validateCanalettoEvent(local).valid, true);
+});
+
+// B) empty cloud does not trigger restoreCanalettoEvent — useCanalettoCloudMirror.js's
+// inbound listener returns immediately on a falsy remoteEvent, BEFORE any
+// decode/validate/restore call; decodeEventFromCloud(null) itself, which
+// that early return is keyed on, is the precondition proven here.
+test('(B) decodeEventFromCloud(null) is exactly the falsy signal the inbound listener early-returns on before ever calling restoreCanalettoEvent', () => {
+  assert.equal(decodeEventFromCloud(null), null);
+  assert.equal(!!decodeEventFromCloud(null), false);
+});
+
+// D) director can create/configure a new local tournament — entirely
+// independent of cloud state by design (useCanalettoEvent.js is untouched
+// by any of the cloud-sync work); this is exhaustively covered by the
+// existing canaletto-event.test.js suite. Spot-checked here for this
+// specific fresh-start scenario.
+test('(D) a fresh local tournament can still be configured normally regardless of cloud state', () => {
+  let event = createCanalettoEvent();
+  event = setEventTables(event, [{ order: 1, label: 'Table 1' }]);
+  event = addPlayerToBlock(event, 'A', { id: 1, name: 'Player 1', elo: 1500 });
+  assert.equal(event.blockA.tournament.roster.length, 1);
+  assert.equal(validateCanalettoEvent(event).valid, true);
+});
+
+// E) explicit first Publish validates + writes — the exact precondition
+// publishToCloud() relies on: a valid local event encodes cleanly and is
+// ready to write; an invalid one is caught before ever reaching
+// writePrivateState().
+test('(E) a valid local event passes validation and encodes cleanly, ready for an explicit first publish', () => {
+  const event = richEvent();
+  assert.equal(validateCanalettoEvent(event).valid, true);
+  const encoded = encodeEventForCloud(event);
+  assert.ok(encoded);
+  assert.equal(validateCanalettoEvent(decodeEventFromCloud(encoded)).valid, true);
+});
+
+test('(E) an invalid local event is caught by validateCanalettoEvent BEFORE any write would occur', () => {
+  const notAnEvent = { not: 'a real event' };
+  assert.equal(validateCanalettoEvent(notAnEvent).valid, false);
+});
+
+// F) after first Publish, auto-sync becomes active — a hook-only state
+// transition (useCanalettoCloudMirror.js's publishToCloud() sets
+// syncMode: 'active' on success); verified by code review of that
+// function. Not independently pure-testable without a component harness.
+
+// G) Firebase read/write/decode failure does not crash the director UI —
+// the codec itself must never throw for malformed/unexpected input (the
+// hook wraps every callback in try/catch on top of this).
+test('(G) decode functions never throw for malformed/garbage input, however unexpected', () => {
+  const garbageInputs = [undefined, null, {}, [], 'a string', 42, true, { blockA: null }, { blockA: {} }, { blockA: { tournament: null } }];
+  garbageInputs.forEach((input) => {
+    assert.doesNotThrow(() => decodeEventFromCloud(input));
+    assert.doesNotThrow(() => decodePublicStateFromCloud(input));
+  });
+});
+
+test('(G) encode functions never throw for null/undefined (defensive — real callers only ever pass a validated event)', () => {
+  assert.doesNotThrow(() => encodeEventForCloud(null));
+  assert.doesNotThrow(() => encodeEventForCloud(undefined));
+  assert.doesNotThrow(() => encodePublicStateForCloud(null));
+  assert.equal(encodeEventForCloud(null), null);
+  assert.equal(encodePublicStateForCloud(null), null);
+});
+
+// H) public/stream page with null cloud data renders a waiting state, not
+// blank — useCloudPublicEvent.js falls back to derivePublicState(a fresh
+// createCanalettoEvent(), null) before any snapshot arrives; that fallback
+// value itself must never crash any consumer (getTvSelectableMatches,
+// resolveTvMatch, getBracketProjection-adjacent reads all touch `ko`,
+// which is exactly the field this hotfix was about).
+test('(H) the empty-fallback publicState used before the first cloud snapshot arrives is itself completely safe to render', () => {
+  const empty = derivePublicState(createCanalettoEvent(), null);
+  assert.doesNotThrow(() => getTvSelectableMatches(empty));
+  assert.deepEqual(getTvSelectableMatches(empty), []);
+  assert.doesNotThrow(() => resolveTvMatch(empty, createCanalettoLiveState()));
+  assert.equal(resolveTvMatch(empty, createCanalettoLiveState()), null);
+  assert.equal(validatePublicState(empty).valid, true);
+});
+
+// I) codec handles null safely.
+test('(I) every codec function handles null/undefined without throwing or fabricating a tournament', () => {
+  assert.equal(decodeEventFromCloud(null), null);
+  assert.equal(decodeEventFromCloud(undefined), null);
+  assert.equal(decodePublicStateFromCloud(null), null);
+  assert.equal(decodePublicStateFromCloud(undefined), null);
+  assert.equal(encodeEventForCloud(null), null);
+  assert.equal(encodePublicStateForCloud(null), null);
+});
+
+// Root-cause-specific: partially-populated ko (e.g. Top16 started, others
+// still null) must survive untouched — the decode default only fills in
+// the FULLY-empty case, never overwrites real KO progress.
+test('a partially-started ko bracket is preserved exactly, not reset to all-null by the decode default', () => {
+  const event = richEvent(); // ko.top16 is real/populated; quarterfinals/semifinals/final are still null
+  const roundTripped = cloudRoundTrip(event);
+  assert.ok(roundTripped.ko.top16);
+  assert.equal(roundTripped.ko.top16.matches.length, event.ko.top16.matches.length);
+  assert.equal(roundTripped.ko.quarterfinals, null);
 });

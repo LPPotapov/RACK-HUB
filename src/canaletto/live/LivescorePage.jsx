@@ -29,7 +29,7 @@ import { frozenMatchDisplay } from '../matchDisplay.js';
 import { BracketOverview } from '../koUi.jsx';
 import { MatchSummaryCard, PageHeader, Panel, SectionHeader, StatusBadge } from '../ui.jsx';
 import { LiveBrandMark, TwoColumnStandings } from './liveComponents.jsx';
-import { useCloudPublicEvent } from './useCloudPublicEvent.js';
+import { EMPTY_PUBLIC_STATE, useCloudPublicEvent } from './useCloudPublicEvent.js';
 
 const MATCH_GRID_CLASSES = 'grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4';
 
@@ -232,9 +232,25 @@ const Top16Section = ({ event }) => {
   );
 };
 
+// Shown while the cloud has never been published to yet (fresh-empty-
+// tournament hotfix, item 9) — `event === EMPTY_PUBLIC_STATE` is the exact
+// same fallback reference useCloudPublicEvent() returns before its first
+// real snapshot arrives. A meaningful "not live yet" message, never a
+// blank/white page.
+const NotLiveYet = () => (
+  <div className="flex min-h-screen items-center justify-center bg-canaletto-bg text-canaletto-lavender">
+    <div className="text-center">
+      <div className="mb-2 font-condensed text-2xl font-black uppercase tracking-wide text-canaletto-cream">Tournament Not Live Yet</div>
+      <div className="text-sm">Waiting for the tournament director to publish live data.</div>
+    </div>
+  </div>
+);
+
 export const LivescorePage = () => {
   const event = useCloudPublicEvent();
   const [section, setSection] = useState('players');
+
+  if (event === EMPTY_PUBLIC_STATE) return <NotLiveYet />;
 
   return (
     <div className="flex min-h-screen bg-canaletto-bg text-canaletto-cream">

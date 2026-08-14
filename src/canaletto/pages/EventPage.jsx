@@ -13,6 +13,7 @@ import { parseEuDateTimeInputs, toEuDateInputValue, toEuTimeInputValue } from '.
 import { TableConfigModal } from '../TableConfigModal.jsx';
 import { BackupDataPanel } from '../BackupControls.jsx';
 import { CloudSyncPanel } from '../CloudSyncPanel.jsx';
+import { CloudErrorBoundary } from '../CloudErrorBoundary.jsx';
 import { ActionButton, Panel, PageHeader, StatusBadge } from '../ui.jsx';
 
 const SCHEDULE_GROUPS = [
@@ -211,7 +212,9 @@ export const EventPage = ({ event, run, onNavigate, cloudAuth }) => {
 
       <div className="flex flex-wrap gap-2">
         <BackupDataPanel event={event} run={run} source="event" />
-        <CloudSyncPanel event={event} run={run} auth={cloudAuth} />
+        <CloudErrorBoundary>
+          <CloudSyncPanel event={event} run={run} auth={cloudAuth} />
+        </CloudErrorBoundary>
       </div>
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
