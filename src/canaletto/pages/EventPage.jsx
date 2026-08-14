@@ -11,6 +11,7 @@ import {
 } from '../../application/canalettoEvent.js';
 import { parseEuDateTimeInputs, toEuDateInputValue, toEuTimeInputValue } from '../schedule.js';
 import { TableConfigModal } from '../TableConfigModal.jsx';
+import { BackupDataPanel } from '../BackupControls.jsx';
 import { ActionButton, Panel, PageHeader, StatusBadge } from '../ui.jsx';
 
 const SCHEDULE_GROUPS = [
@@ -206,6 +207,8 @@ export const EventPage = ({ event, run, onNavigate }) => {
         title={event.settings.title}
         subtitle={[event.settings.venue, event.settings.date].filter(Boolean).join(' · ') || 'Set venue/date in Event Settings'}
       />
+
+      <BackupDataPanel event={event} run={run} source="event" />
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <button type="button" onClick={() => onNavigate('blockA')} className="text-left">

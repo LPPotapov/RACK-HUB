@@ -7,9 +7,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SCHEDULE_KEYS, createCanalettoEvent, validateCanalettoEvent } from '../application/canalettoEvent.js';
 
-const STORAGE_KEY = 'canaletto-event-v1';
+export const CANALETTO_EVENT_STORAGE_KEY = 'canaletto-event-v1';
+const STORAGE_KEY = CANALETTO_EVENT_STORAGE_KEY;
 
-const loadInitialEvent = () => {
+// Exported so read-only consumers (the LIVE/public/OBS overlay pages — see
+// src/canaletto/live/useCanalettoEventReadOnly.js) can load the exact same
+// event shape, including the migration shims below, without duplicating
+// this logic or risking it drifting out of sync.
+export const loadInitialEvent = () => {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return createCanalettoEvent();

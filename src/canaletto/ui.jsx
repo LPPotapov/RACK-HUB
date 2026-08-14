@@ -456,57 +456,83 @@ export const formatDelta = (n) => {
 // (the Block Results 1-16 / 17-32 split) fits a normal widescreen viewport
 // without scrolling — the dominant cost at 16+ rows is per-row padding, not
 // the surrounding page chrome.
-export const StandingsTable = ({ players, qualificationThreshold }) => (
-  <div className="overflow-x-auto">
-    <table className="w-full min-w-[560px] border-collapse text-left text-sm">
-      <thead>
-        <tr className="border-b border-canaletto-border text-[11px] font-bold uppercase tracking-widest text-canaletto-lavender">
-          <th className="px-2 py-1">#</th>
-          <th className="px-2 py-1">Player</th>
-          <th className="px-2 py-1 text-right">MP</th>
-          <th className="px-2 py-1 text-right">Rack Diff</th>
-          <th className="px-2 py-1 text-right">Perf</th>
-          <th className="px-2 py-1">GBR</th>
-        </tr>
-      </thead>
-      <tbody>
-        {players.map((p, i) => {
-          const rank = p.rank ?? i + 1;
-          const qualifies = qualificationThreshold != null && rank <= qualificationThreshold;
-          const isCutLine = qualificationThreshold != null && rank === qualificationThreshold + 1;
-          const diff = p.diff !== undefined ? p.diff : (p.racksWon || 0) - (p.racksLost || 0);
-          // A frozen qualifier (post-lock) already stores an AVERAGE perf and
-          // has no perfCount; a raw Player (pre-lock) stores an accumulated
-          // SUM in `perf` alongside `perfCount` and must be averaged here.
-          const perf = p.perfCount !== undefined ? (p.perfCount > 0 ? p.perf / p.perfCount : 0) : p.perf;
-          const gbr = p.gbr !== undefined ? p.gbr : p.elo;
-          const hasDelta = p.deltaGbr !== undefined;
-          // LOCKED QUALIFIER (director correction pass, item 6): once a
-          // block is locked, its frozen qualifier IDENTITIES (set by
-          // getBlockResultsRows()) turn magenta — a stronger, permanent
-          // signal, distinct from the ordinary gold "currently qualifying"
-          // highlight that only applies pre-lock.
-          const locked = p.lockedQualifier === true;
-          return (
-            <tr
-              key={p.playerId ?? p.id}
-              className={`border-b border-canaletto-border/60 ${isCutLine ? 'border-t-2 border-t-canaletto-magenta' : ''} ${locked ? 'bg-canaletto-magenta/5' : qualifies ? 'bg-canaletto-gold/5' : ''}`}
-            >
-              <td className={`px-2 py-1 font-condensed text-base font-black ${locked ? 'text-canaletto-magenta' : qualifies ? 'text-canaletto-gold' : 'text-canaletto-lavender'}`}>{rank}</td>
-              <td className={`px-2 py-1 font-semibold ${locked ? 'text-canaletto-magenta' : 'text-canaletto-cream'}`}>{p.name}</td>
-              <td className="px-2 py-1 text-right text-canaletto-cream">{p.mp}</td>
-              <td className={`px-2 py-1 text-right font-bold ${diff > 0 ? 'text-canaletto-gold' : 'text-canaletto-lavender'}`}>
-                {diff > 0 ? `+${diff}` : diff}
-              </td>
-              <td className="px-2 py-1 text-right text-canaletto-cream">{Math.round(perf)}</td>
-              <td className="px-2 py-1 font-bold text-canaletto-cream">
-                {Math.round(Number(gbr))}
-                {hasDelta && <span className="ml-1 text-[11px] font-semibold text-canaletto-lavender">({formatDelta(p.deltaGbr)})</span>}
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
-  </div>
-);
+//
+// `compact` (director correction pass — Top12 overlay must fit its fixed
+// right-side OBS panel width with NO horizontal scrollbar): drops the Perf
+// column and tightens padding/typography. Still the SAME single
+// implementation/highlight logic as the full table below it, just fewer
+// columns and less horizontal space per cell — never a second
+// qualification-highlight implementation, and no `min-w` floor forcing a
+// scrollbar in a narrow panel. Used by the public Players page.
+//
+// `size="large"` (LIVE/OBS correction pass — Top12 overlay restoring Perf at
+// ~20% bigger scale): same Perf column and row structure as the default/
+// "normal" size, just larger type/padding, and — like `compact` — no forced
+// `min-w` floor, since the Top12 overlay panel itself is sized to fit
+// (never a scrollbar). `compact` and `size="large"` are mutually exclusive;
+// `compact` implies `size="compact"` when `size` isn't given explicitly.
+export const StandingsTable = ({ players, qualificationThreshold, compact = false, size = compact ? 'compact' : 'normal' }) => {
+  const isCompact = size === 'compact';
+  const isLarge = size === 'large';
+  const showPerf = !isCompact;
+  const headCellPad = isCompact ? 'px-1 py-1' : isLarge ? 'px-2.5 py-1.5' : 'px-2 py-1';
+  const cellPad = isCompact ? 'px-1 py-0.5' : isLarge ? 'px-2.5 py-1.5' : 'px-2 py-1';
+  const tableTextClass = isCompact ? 'text-xs' : isLarge ? 'text-base' : 'text-sm';
+  const rankTextClass = isLarge ? 'text-lg' : 'text-base';
+  const scrolls = !isCompact && !isLarge;
+
+  return (
+    <div className={scrolls ? 'overflow-x-auto' : ''}>
+      <table className={`w-full border-collapse text-left ${tableTextClass} ${scrolls ? 'min-w-[560px]' : ''}`}>
+        <thead>
+          <tr className="border-b border-canaletto-border text-[11px] font-bold uppercase tracking-widest text-canaletto-lavender">
+            <th className={headCellPad}>#</th>
+            <th className={headCellPad}>Player</th>
+            <th className={`text-right ${headCellPad}`}>MP</th>
+            <th className={`text-right ${headCellPad}`}>{isCompact ? 'Diff' : 'Rack Diff'}</th>
+            {showPerf && <th className={`text-right ${headCellPad}`}>Perf</th>}
+            <th className={headCellPad}>GBR</th>
+          </tr>
+        </thead>
+        <tbody>
+          {players.map((p, i) => {
+            const rank = p.rank ?? i + 1;
+            const qualifies = qualificationThreshold != null && rank <= qualificationThreshold;
+            const isCutLine = qualificationThreshold != null && rank === qualificationThreshold + 1;
+            const diff = p.diff !== undefined ? p.diff : (p.racksWon || 0) - (p.racksLost || 0);
+            // A frozen qualifier (post-lock) already stores an AVERAGE perf and
+            // has no perfCount; a raw Player (pre-lock) stores an accumulated
+            // SUM in `perf` alongside `perfCount` and must be averaged here.
+            const perf = p.perfCount !== undefined ? (p.perfCount > 0 ? p.perf / p.perfCount : 0) : p.perf;
+            const gbr = p.gbr !== undefined ? p.gbr : p.elo;
+            const hasDelta = p.deltaGbr !== undefined;
+            // LOCKED QUALIFIER (director correction pass, item 6): once a
+            // block is locked, its frozen qualifier IDENTITIES (set by
+            // getBlockResultsRows()) turn magenta — a stronger, permanent
+            // signal, distinct from the ordinary gold "currently qualifying"
+            // highlight that only applies pre-lock.
+            const locked = p.lockedQualifier === true;
+            return (
+              <tr
+                key={p.playerId ?? p.id}
+                className={`border-b border-canaletto-border/60 ${isCutLine ? 'border-t-2 border-t-canaletto-magenta' : ''} ${locked ? 'bg-canaletto-magenta/5' : qualifies ? 'bg-canaletto-gold/5' : ''}`}
+              >
+                <td className={`${cellPad} font-condensed ${rankTextClass} font-black ${locked ? 'text-canaletto-magenta' : qualifies ? 'text-canaletto-gold' : 'text-canaletto-lavender'}`}>{rank}</td>
+                <td className={`${cellPad} truncate font-semibold ${locked ? 'text-canaletto-magenta' : 'text-canaletto-cream'}`}>{p.name}</td>
+                <td className={`${cellPad} text-right text-canaletto-cream`}>{p.mp}</td>
+                <td className={`${cellPad} text-right font-bold ${diff > 0 ? 'text-canaletto-gold' : 'text-canaletto-lavender'}`}>
+                  {diff > 0 ? `+${diff}` : diff}
+                </td>
+                {showPerf && <td className={`${cellPad} text-right text-canaletto-cream`}>{Math.round(perf)}</td>}
+                <td className={`${cellPad} font-bold text-canaletto-cream`}>
+                  {Math.round(Number(gbr))}
+                  {hasDelta && <span className="ml-1 text-[11px] font-semibold text-canaletto-lavender">({formatDelta(p.deltaGbr)})</span>}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+};

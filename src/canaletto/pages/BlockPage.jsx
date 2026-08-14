@@ -22,6 +22,7 @@ import { formatScheduleRange } from '../schedule.js';
 import { AddPlayerModal } from '../AddPlayerModal.jsx';
 import { ManualPairingModal } from '../ManualPairingModal.jsx';
 import { DangerZone } from '../DangerZone.jsx';
+import { SaveBackupButton } from '../BackupControls.jsx';
 import { ActionButton, CompactStatusBar, MatchRow, MatchSummaryCard, PageHeader, Panel, StandingsTable, StatusBadge } from '../ui.jsx';
 
 // Match card grid: 4 columns on the normal widescreen layout. `lg` (1024px)
@@ -230,7 +231,16 @@ const ResultsView = ({ event, run, block }) => {
 
   return (
     <div>
-      <Panel title="Standings" compact right={<StatusBadge status={status} />}>
+      <Panel
+        title="Standings"
+        compact
+        right={
+          <div className="flex items-center gap-2">
+            <SaveBackupButton event={event} source={`block${block}`} />
+            <StatusBadge status={status} />
+          </div>
+        }
+      >
         <div className="mb-1 text-[11px] text-canaletto-lavender">Sort order: Match Points, then Rack Diff, then PERF/GBR.</div>
         <TwoColumnStandings rows={rows} qualificationThreshold={event.settings.qualificationThreshold} />
       </Panel>

@@ -22,6 +22,7 @@ import { formatScheduleRange } from '../schedule.js';
 import { BracketOverview, ChampionBanner, ChampionKoSummary, KoCalibrationControl, KoMatchCard, KoPlayerSummaryTable, KoResultsTable } from '../koUi.jsx';
 import { ActionButton, PageHeader, Panel, StatusBadge } from '../ui.jsx';
 import { TypedConfirmModal } from '../TypedConfirmModal.jsx';
+import { SaveBackupButton } from '../BackupControls.jsx';
 
 // Maps a KO stage to its schedule key(s) (docs task item 5/6) — Top16 has
 // two (one per operational slot), every other stage has exactly one.
@@ -218,7 +219,12 @@ export const Top16Page = ({ event, run }) => {
         eyebrow="Knockout"
         title="Canaletto Cup — Bracket"
         subtitle={champion ? 'Complete' : currentStage ? `Operating ${KO_STAGE_LABEL[currentStage]}` : 'Seeded strictly from frozen Block A / Block B rank'}
-        right={<StatusBadge status={champion ? 'COMPLETE' : currentStage ? 'RUNNING' : status} />}
+        right={
+          <div className="flex items-center gap-2">
+            <SaveBackupButton event={event} source="ko" />
+            <StatusBadge status={champion ? 'COMPLETE' : currentStage ? 'RUNNING' : status} />
+          </div>
+        }
       />
 
       <ChampionBanner champion={champion} />

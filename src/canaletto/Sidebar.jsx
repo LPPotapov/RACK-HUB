@@ -6,7 +6,8 @@ const NAV_ITEMS = [
   { id: 'players', label: 'Players', code: 'PL' },
   { id: 'blockA', label: 'Block A', code: 'A' },
   { id: 'blockB', label: 'Block B', code: 'B' },
-  { id: 'top16', label: 'Top 16', code: '16' }
+  { id: 'top16', label: 'Top 16', code: '16' },
+  { id: 'live', label: 'Live', code: 'LV' }
 ];
 
 const DOT_STYLES = {

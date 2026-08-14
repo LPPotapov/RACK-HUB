@@ -5,6 +5,7 @@ import { EventPage } from './pages/EventPage.jsx';
 import { PlayersPage } from './pages/PlayersPage.jsx';
 import { BlockPage } from './pages/BlockPage.jsx';
 import { Top16Page } from './pages/Top16Page.jsx';
+import { LivePage } from './pages/LivePage.jsx';
 
 function CanalettoApp() {
   const { event, run, error, clearError } = useCanalettoEvent();
@@ -25,6 +26,7 @@ function CanalettoApp() {
         {page === 'blockA' && <BlockPage event={event} run={run} block="A" />}
         {page === 'blockB' && <BlockPage event={event} run={run} block="B" />}
         {page === 'top16' && <Top16Page event={event} run={run} />}
+        {page === 'live' && <LivePage event={event} />}
       </main>
     </div>
   );
