@@ -18,10 +18,19 @@
 // derivePublicState() of a fresh createCanalettoEvent() — the same "empty
 // event" shape the app already shows for a brand new local tournament,
 // never `null`/undefined that every consumer would need its own guard for.
+//
+// VALIDATION (urgent-blocker fix): every incoming value is checked with
+// validatePublicState() — the lightweight schema for THIS reduced shape —
+// before being applied. A malformed/unexpected payload is logged and
+// ignored (the previous good value is kept), never thrown, and this NEVER
+// calls validateCanalettoEvent()/restoreCanalettoEvent() (the full-event
+// validator/replace-command those are exclusively for `privateState` and
+// the local JSON backup/restore feature — routing publicState through
+// them is exactly the bug this fix closes off).
 
 import { useEffect, useState } from 'react';
 import { createCanalettoEvent } from '../../application/canalettoEvent.js';
-import { derivePublicState } from '../../application/canalettoPublicState.js';
+import { derivePublicState, validatePublicState } from '../../application/canalettoPublicState.js';
 import { subscribePublicState } from '../../firebase/canalettoCloudSync.js';
 
 const EMPTY_PUBLIC_STATE = derivePublicState(createCanalettoEvent(), null);
@@ -33,7 +42,13 @@ export const useCloudPublicEvent = () => {
     () =>
       subscribePublicState(
         (value) => {
-          if (value) setPublicState(value);
+          if (!value) return;
+          const result = validatePublicState(value);
+          if (!result.valid) {
+            console.warn('Canaletto cloud sync: publicState failed validation, ignoring update', result.errors);
+            return;
+          }
+          setPublicState(value);
         },
         (error) => console.warn('Canaletto cloud sync: publicState listener error', error)
       ),

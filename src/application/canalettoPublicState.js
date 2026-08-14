@@ -76,6 +76,42 @@ const publicTables = (tables) => (tables || []).map((t) => ({ order: t.order, la
 // about to be sent over the network.
 const toJsonSafe = (value) => JSON.parse(JSON.stringify(value));
 
+// Lightweight structural check for the REDUCED public shape — deliberately
+// NOT canalettoEvent.js's validateCanalettoEvent() (urgent-blocker fix):
+// that validator requires full-CanalettoEvent-only fields this projection
+// intentionally omits (each block's `pendingPlayers`/`preAdvanceSnapshot`),
+// so a genuine publicState payload always fails it. Any consumer of the
+// `publicState` RTDB node (useCloudPublicEvent.js) must validate incoming
+// data against THIS schema, and must never route it through
+// validateCanalettoEvent()/restoreCanalettoEvent() — those exist solely for
+// the full-event `privateState` node and the local JSON backup/restore
+// feature.
+export const validatePublicState = (parsed) => {
+  const errors = [];
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return { valid: false, errors: ['publicState must be a plain object'] };
+  }
+  if (parsed.publicStateVersion !== CANALETTO_PUBLIC_STATE_VERSION) {
+    errors.push(`Unsupported publicStateVersion "${parsed.publicStateVersion}" — expected ${CANALETTO_PUBLIC_STATE_VERSION}`);
+  }
+  ['blockA', 'blockB'].forEach((block) => {
+    const tournament = parsed[block] && parsed[block].tournament;
+    if (typeof tournament !== 'object' || tournament === null) {
+      errors.push(`${block}.tournament must be an object`);
+      return;
+    }
+    if (!Array.isArray(tournament.roster)) errors.push(`${block}.tournament.roster must be an array`);
+    if (!Array.isArray(tournament.players)) errors.push(`${block}.tournament.players must be an array`);
+    if (typeof tournament.rounds !== 'object' || tournament.rounds === null || Array.isArray(tournament.rounds)) {
+      errors.push(`${block}.tournament.rounds must be a plain object keyed by round number`);
+    }
+  });
+  if (typeof parsed.settings !== 'object' || parsed.settings === null) errors.push('settings must be an object');
+  if (!Array.isArray(parsed.tables)) errors.push('tables must be an array');
+  if (typeof parsed.ko !== 'object' || parsed.ko === null) errors.push('ko must be an object');
+  return { valid: errors.length === 0, errors };
+};
+
 export const derivePublicState = (event, liveState) => toJsonSafe({
   publicStateVersion: CANALETTO_PUBLIC_STATE_VERSION,
   updatedAt: new Date().toISOString(),

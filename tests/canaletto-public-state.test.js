@@ -15,8 +15,15 @@ import {
   startTop16,
   updateKoGbrWeight
 } from '../src/application/canalettoEvent.js';
-import { createCanalettoLiveState, selectTvMatch, setTvScore } from '../src/application/canalettoLive.js';
-import { CANALETTO_PUBLIC_STATE_VERSION, derivePublicState } from '../src/application/canalettoPublicState.js';
+import {
+  createCanalettoLiveState,
+  getTvSelectableMatches,
+  resolveTvMatch,
+  selectTvMatch,
+  setTvScore
+} from '../src/application/canalettoLive.js';
+import { restoreCanalettoEvent } from '../src/application/canalettoBackup.js';
+import { CANALETTO_PUBLIC_STATE_VERSION, derivePublicState, validatePublicState } from '../src/application/canalettoPublicState.js';
 
 const rosterOf = (n, offset = 0) => Array.from({ length: n }, (_, i) => ({ id: offset + i + 1, name: `Player ${offset + i + 1}`, elo: 1500 + (n - i) }));
 const tablesOf = (n) => Array.from({ length: n }, (_, i) => ({ order: i + 1, label: `Table ${i + 1}`, billardPadId: `bp-${i + 1}`, scoreLink: `https://example.test/${i + 1}` }));
@@ -152,4 +159,71 @@ test('derivePublicState works for a freshly-created (not-yet-started) event', ()
   assert.deepEqual(publicState.blockA.tournament.roster, []);
   assert.equal(publicState.blockALock, null);
   assert.deepEqual(publicState.ko, { top16: null, quarterfinals: null, semifinals: null, final: null });
+});
+
+// ---------------------------------------------------------------------------
+// Regression — urgent blocker: publicState was reported reaching
+// restoreCanalettoEvent()/validateCanalettoEvent() (the FULL-event
+// validator), which always rejects it since it intentionally lacks
+// pendingPlayers/preAdvanceSnapshot. Direct source trace found no such call
+// site in any public/OBS consumer (useCloudPublicEvent.js,
+// TvScoreControlPage.jsx, and the other five live/ pages never import
+// canalettoBackup.js) — these tests lock in the CORRECT contract: a public
+// cloud consumer validates with validatePublicState() (the lightweight
+// schema for this reduced shape) and NEVER with the full-event validator,
+// while the full validator/restore command continue to correctly reject a
+// reduced payload (proving why routing it through them would always fail).
+// ---------------------------------------------------------------------------
+
+test('a derived publicState is accepted by validatePublicState (the public cloud consumer\'s own schema)', () => {
+  const event = richEvent();
+  const publicState = derivePublicState(event, null);
+  const result = validatePublicState(publicState);
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.valid, true);
+});
+
+test('a derived publicState is REJECTED by the full-event restoreCanalettoEvent/validateCanalettoEvent (proving it must never be routed through them)', () => {
+  const event = richEvent();
+  const publicState = derivePublicState(event, null);
+  assert.throws(
+    () => restoreCanalettoEvent(createCanalettoEvent(), publicState),
+    /failed validation/
+  );
+});
+
+test('the Stream Staff match catalog (getTvSelectableMatches) can be built directly from a derived publicState, with no full event required', () => {
+  const event = richEvent();
+  const publicState = derivePublicState(event, null);
+  const rows = getTvSelectableMatches(publicState);
+  assert.ok(rows.some((r) => r.source === 'ko'));
+  const koRow = rows.find((r) => r.source === 'ko');
+  assert.ok(koRow.p1Name);
+  assert.ok(koRow.p2Name);
+});
+
+test('resolveTvMatch (used by both TvOverlayPage and TvScoreControlPage) works against a derived publicState', () => {
+  const event = richEvent();
+  const publicState = derivePublicState(event, null);
+  const targetMatchNumber = event.ko.top16.matches[1].matchNumber;
+  const liveState = selectTvMatch(createCanalettoLiveState(), { source: 'ko', stage: 'top16', matchNumber: targetMatchNumber });
+  const resolved = resolveTvMatch(publicState, liveState);
+  assert.equal(resolved.source, 'ko');
+  assert.equal(resolved.p1.name, event.ko.top16.matches[1].p1.name);
+  assert.equal(resolved.p2.name, event.ko.top16.matches[1].p2.name);
+});
+
+test('validatePublicState rejects a malformed/incomplete payload cleanly', () => {
+  assert.equal(validatePublicState(null).valid, false);
+  assert.equal(validatePublicState('nope').valid, false);
+  assert.equal(validatePublicState({}).valid, false);
+  const badVersion = { ...derivePublicState(richEvent(), null), publicStateVersion: 999 };
+  assert.equal(validatePublicState(badVersion).valid, false);
+});
+
+test('restoreCanalettoEvent continues to reject an incomplete/malformed full-event backup object (unrelated to this fix, still correct)', () => {
+  assert.throws(
+    () => restoreCanalettoEvent(createCanalettoEvent(), { not: 'a real event' }),
+    /failed validation/
+  );
 });
