@@ -33,7 +33,12 @@ import { createCanalettoEvent } from '../../application/canalettoEvent.js';
 import { derivePublicState, validatePublicState } from '../../application/canalettoPublicState.js';
 import { subscribePublicState } from '../../firebase/canalettoCloudSync.js';
 
-const EMPTY_PUBLIC_STATE = derivePublicState(createCanalettoEvent(), null);
+// Exported so a consumer that needs to distinguish "still showing the
+// empty-fallback default" from "a real snapshot has arrived" (e.g.
+// TvScoreControlPage.jsx's first-load loading state) can compare by
+// reference (`event === EMPTY_PUBLIC_STATE`) without this hook needing to
+// change its return shape for its five other, already-established callers.
+export const EMPTY_PUBLIC_STATE = derivePublicState(createCanalettoEvent(), null);
 
 export const useCloudPublicEvent = () => {
   const [publicState, setPublicState] = useState(EMPTY_PUBLIC_STATE);

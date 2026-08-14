@@ -3,28 +3,41 @@
 // Placed on EventPage.jsx next to BackupDataPanel, matching its same
 // collapsible-panel pattern. Background mirroring itself happens in
 // useCanalettoCloudMirror.js (composed once in CanalettoApp.jsx); this
-// component is the sign-in UI plus the two EXPLICIT safeguards:
+// component is the sign-in UI plus the explicit safeguards:
 //
 //   - Publish to Cloud — force-push the current local event now (the
 //     background mirror already does this automatically on every change;
 //     this is a visible, on-demand "sync now", e.g. after reconnecting).
+//     Reuses `auth.repairCloudWithLocal()` (same validated
+//     publishFullLocalEventToCloud path the invalid-cloud repair action
+//     below uses) so this button can never write unvalidated data either.
 //   - Load from Cloud — fetch the cloud's current privateState, validate
 //     it (validateCanalettoEvent — the SAME validator the local-file
 //     Restore Backup flow uses), show a summary, and require typing
 //     "LOAD FROM CLOUD" before REPLACING the local event via the SAME
 //     restoreCanalettoEvent() pure command BackupControls.jsx's file
 //     restore already uses. Never a silent/automatic replace.
+//   - INVALID CLOUD STATE warning (event-blocking cloud sync fix, item 4) —
+//     shown whenever `auth.cloudStatus === 'invalid'` (the background
+//     listener received a malformed remoteEvent and refused to touch local
+//     state — see useCanalettoCloudMirror.js). Offers an explicit "Replace
+//     Invalid Cloud With This Local Tournament" action, typed-confirmation
+//     gated, calling the SAME `auth.repairCloudWithLocal()`.
+//   - CLOUD PUBLISH BLOCKED warning — shown whenever
+//     `auth.cloudStatus === 'publishBlocked'` (the local event itself
+//     failed validateCanalettoEvent() right before a scheduled publish;
+//     should not happen in practice, but never silently swallowed).
 //
 // `auth` is the object returned by useCanalettoCloudMirror() in
-// CanalettoApp.jsx — ONE Firebase Auth subscription shared between the
-// background mirror and this panel, not a second one.
+// CanalettoApp.jsx — ONE Firebase Auth subscription (plus cloudStatus/
+// cloudErrors/repairCloudWithLocal) shared between the background mirror
+// and this panel, not a second one.
 
 import { useState } from 'react';
 import { getBlockStatus, getCurrentKoStage, getKoChampion, validateCanalettoEvent } from '../application/canalettoEvent.js';
 import { restoreCanalettoEvent } from '../application/canalettoBackup.js';
-import { derivePublicState } from '../application/canalettoPublicState.js';
 import { KO_STAGE_LABEL } from '../application/canalettoKo.js';
-import { readPrivateStateOnce, writePrivateState, writePublicState } from '../firebase/canalettoCloudSync.js';
+import { readPrivateStateOnce } from '../firebase/canalettoCloudSync.js';
 import { isFirebaseConfigured } from '../firebase/firebaseApp.js';
 import { ActionButton, Panel } from './ui.jsx';
 import { TypedConfirmModal } from './TypedConfirmModal.jsx';
@@ -36,6 +49,7 @@ const koStatusLabel = (event) => {
 };
 
 const LOAD_PHRASE = 'LOAD FROM CLOUD';
+const REPAIR_PHRASE = 'REPLACE CLOUD';
 
 export const CloudSyncPanel = ({ event, run, auth }) => {
   const [open, setOpen] = useState(false);
@@ -44,6 +58,7 @@ export const CloudSyncPanel = ({ event, run, auth }) => {
   const [publishStatus, setPublishStatus] = useState(null); // 'publishing' | 'published' | null
   const [loadError, setLoadError] = useState(null);
   const [pendingLoad, setPendingLoad] = useState(null); // validated remote event awaiting typed confirmation
+  const [pendingRepair, setPendingRepair] = useState(false);
 
   if (!isFirebaseConfigured) {
     return (
@@ -53,10 +68,13 @@ export const CloudSyncPanel = ({ event, run, auth }) => {
     );
   }
 
-  const handlePublish = async () => {
+  const handlePublish = () => {
     setPublishStatus('publishing');
-    await writePrivateState(event);
-    await writePublicState(derivePublicState(event, null));
+    const result = auth.repairCloudWithLocal();
+    if (!result.ok) {
+      setPublishStatus(null);
+      return;
+    }
     setPublishStatus('published');
     setTimeout(() => setPublishStatus(null), 1500);
   };
@@ -114,6 +132,26 @@ export const CloudSyncPanel = ({ event, run, auth }) => {
               <div className="mb-3 text-xs text-canaletto-lavender">
                 Signed in as <span className="font-semibold text-canaletto-cream">{auth.user.email}</span> — every local change now mirrors to the cloud automatically.
               </div>
+
+              {auth.cloudStatus === 'invalid' && (
+                <div className="mb-3 rounded border border-canaletto-magenta/60 bg-canaletto-magenta/10 p-2">
+                  <div className="mb-1 font-condensed text-xs font-bold uppercase tracking-widest text-canaletto-magenta">Invalid Cloud State</div>
+                  <div className="mb-2 whitespace-pre-line text-[11px] text-canaletto-lavender">
+                    The cloud's tournament data failed validation and was NOT applied — your local tournament is untouched.{'\n'}{auth.cloudErrors.join('\n')}
+                  </div>
+                  <ActionButton variant="danger" className="px-3 py-1 text-xs" onClick={() => setPendingRepair(true)}>
+                    Replace Invalid Cloud With This Local Tournament
+                  </ActionButton>
+                </div>
+              )}
+
+              {auth.cloudStatus === 'publishBlocked' && (
+                <div className="mb-3 rounded border border-canaletto-magenta/60 bg-canaletto-magenta/10 p-2">
+                  <div className="mb-1 font-condensed text-xs font-bold uppercase tracking-widest text-canaletto-magenta">Cloud Publish Blocked — Local Event Failed Validation</div>
+                  <div className="whitespace-pre-line text-[11px] text-canaletto-lavender">{auth.cloudErrors.join('\n')}</div>
+                </div>
+              )}
+
               <div className="flex flex-wrap gap-2">
                 <ActionButton variant="outline" className="px-3 py-1 text-xs" onClick={handlePublish}>
                   {publishStatus === 'publishing' ? 'Publishing…' : publishStatus === 'published' ? 'Published ✓' : 'Publish to Cloud'}
@@ -150,6 +188,28 @@ export const CloudSyncPanel = ({ event, run, auth }) => {
           confirmLabel="Load"
           onConfirm={() => run(restoreCanalettoEvent, pendingLoad)}
           onClose={() => setPendingLoad(null)}
+        />
+      )}
+
+      {pendingRepair && (
+        <TypedConfirmModal
+          title="Replace Invalid Cloud With This Local Tournament"
+          warning={
+            <div>
+              <div className="mb-2">
+                This OVERWRITES the cloud's current (invalid) tournament data with your local tournament — both blocks, the KO bracket, tables, and settings. This is the repair action for a corrupted/malformed cloud state; it never reads from or modifies your local tournament.
+              </div>
+              <div className="rounded border border-canaletto-border bg-canaletto-panel2 p-2 text-xs text-canaletto-cream">
+                <div>Block A: {getBlockStatus(event, 'A')}</div>
+                <div>Block B: {getBlockStatus(event, 'B')}</div>
+                <div>KO: {koStatusLabel(event)}</div>
+              </div>
+            </div>
+          }
+          phrase={REPAIR_PHRASE}
+          confirmLabel="Replace Cloud"
+          onConfirm={() => auth.repairCloudWithLocal()}
+          onClose={() => setPendingRepair(false)}
         />
       )}
     </div>

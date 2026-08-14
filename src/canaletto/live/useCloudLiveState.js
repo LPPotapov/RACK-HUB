@@ -25,11 +25,17 @@ export const useCloudLiveState = () => {
   const [liveState, setLiveState] = useState(createCanalettoLiveState);
   const liveStateRef = useRef(liveState);
   liveStateRef.current = liveState;
+  // True once the listener has fired at least once (even with `null` —
+  // "nothing published yet" is still a resolved answer, not "still
+  // loading"). Used by TvScoreControlPage.jsx to distinguish an initial
+  // loading state from "confirmed no live match selected yet".
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(
     () =>
       subscribeLiveState(
         (value) => {
+          setLoaded(true);
           if (!value) return;
           liveStateRef.current = value;
           setLiveState(value);
@@ -58,5 +64,5 @@ export const useCloudLiveState = () => {
     [canWrite]
   );
 
-  return { liveState, run, canWrite, auth };
+  return { liveState, run, canWrite, auth, loaded };
 };

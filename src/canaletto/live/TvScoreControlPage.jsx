@@ -37,8 +37,15 @@ import {
 } from '../../application/canalettoLive.js';
 import { ActionButton, PageHeader, Panel } from '../ui.jsx';
 import { LiveBrandMark } from './liveComponents.jsx';
-import { useCloudPublicEvent } from './useCloudPublicEvent.js';
+import { EMPTY_PUBLIC_STATE, useCloudPublicEvent } from './useCloudPublicEvent.js';
 import { useCloudLiveState } from './useCloudLiveState.js';
+import { isFirebaseConfigured } from '../../firebase/firebaseApp.js';
+
+const CenteredStatus = ({ children }) => (
+  <div className="flex min-h-screen items-center justify-center bg-canaletto-bg text-canaletto-lavender">
+    <div className="font-condensed text-xs font-bold uppercase tracking-widest">{children}</div>
+  </div>
+);
 
 const ScoreStepper = ({ label, value, onChange }) => (
   <div className="rounded border border-canaletto-border bg-canaletto-panel p-4 text-center">
@@ -130,11 +137,20 @@ const SignInGate = ({ auth }) => {
   );
 };
 
+// First-load state machine (event-blocking cloud sync fix, item 8 — "fix
+// tv-control so first load never renders white"): AUTH CHECK… -> SIGN IN
+// (SignInGate, covers "not signed in" and "wrong account") -> LOADING LIVE
+// DATA… -> normal UI, plus a standalone LIVE DATA UNAVAILABLE state when
+// Firebase itself isn't configured (this page has no useful offline mode —
+// unlike the director app, it has zero purpose without cloud sync).
 export const TvScoreControlPage = () => {
   const event = useCloudPublicEvent();
-  const { liveState, run, canWrite, auth } = useCloudLiveState();
+  const { liveState, run, canWrite, auth, loaded } = useCloudLiveState();
   const resolved = resolveTvMatch(event, liveState);
   const score = getCurrentTvScore(liveState);
+
+  if (!isFirebaseConfigured) return <CenteredStatus>Live Data Unavailable</CenteredStatus>;
+  if (auth.loading) return <CenteredStatus>Auth Check…</CenteredStatus>;
 
   return (
     <div className="min-h-screen bg-canaletto-bg px-8 py-6 text-canaletto-cream">
@@ -146,7 +162,13 @@ export const TvScoreControlPage = () => {
 
         {!canWrite && <SignInGate auth={auth} />}
 
-        {canWrite && (
+        {canWrite && (!loaded || event === EMPTY_PUBLIC_STATE) && (
+          <Panel>
+            <div className="text-canaletto-lavender">Loading live data…</div>
+          </Panel>
+        )}
+
+        {canWrite && loaded && event !== EMPTY_PUBLIC_STATE && (
           <>
             <StaffTvMatchSelector event={event} liveState={liveState} run={run} />
 
