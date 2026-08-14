@@ -1,7 +1,7 @@
 // TV overlay score control (LIVE milestone) — a dedicated page for the
 // STREAMING team, separate from the director app, to adjust the broadcast
 // score shown on TvOverlayPage.jsx. Writes ONLY to canalettoLive.js's
-// independent live state (via useCanalettoLiveState()) — this page never
+// independent live state (via useCloudLiveState()) — this page never
 // imports canalettoEvent.js's mutating commands and has no access to them,
 // so it is structurally unable to affect official tournament results, not
 // merely instructed not to.
@@ -17,20 +17,28 @@
 // The score itself is PER MATCH (getCurrentTvScore()/setTvScore(), keyed by
 // tvMatchKey()) so switching cameras away and back restores whatever score
 // was already dialled in for that match, never resets it.
+//
+// Canaletto Cup 2026 cloud sync pass — event/liveState now come from the
+// Realtime Database (useCloudPublicEvent()/useCloudLiveState()) so this
+// page works from any machine, and control itself is now AUTH-GATED: only
+// a signed-in director or the stream/Qniverse UID may select a match or
+// adjust the score (useCloudLiveState()'s `run()` already refuses to write
+// for anyone else — the sign-in gate below is the corresponding UI, not a
+// second independent check).
 
+import { useState } from 'react';
 import {
   getCurrentTvScore,
   getTvSelectableMatches,
   isSelectedTvRow,
-  PREFERRED_TV_TABLE_LABEL,
   resolveTvMatch,
   selectTvMatch,
   setTvScore
 } from '../../application/canalettoLive.js';
 import { ActionButton, PageHeader, Panel } from '../ui.jsx';
 import { LiveBrandMark } from './liveComponents.jsx';
-import { useCanalettoEventReadOnly } from './useCanalettoEventReadOnly.js';
-import { useCanalettoLiveState } from '../useCanalettoLiveState.js';
+import { useCloudPublicEvent } from './useCloudPublicEvent.js';
+import { useCloudLiveState } from './useCloudLiveState.js';
 
 const ScoreStepper = ({ label, value, onChange }) => (
   <div className="rounded border border-canaletto-border bg-canaletto-panel p-4 text-center">
@@ -94,9 +102,37 @@ const StaffTvMatchSelector = ({ event, liveState, run }) => {
   );
 };
 
+// Sign-in gate — until a director or stream UID is signed in, no match
+// selector or score control renders at all (not merely disabled).
+const SignInGate = ({ auth }) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  if (auth.user && !auth.isDirector && !auth.isStream) {
+    return (
+      <Panel>
+        <div className="mb-2 text-canaletto-magenta">Signed in as {auth.user.email}, but this account is not authorized for TV control.</div>
+        <ActionButton variant="outline" className="px-3 py-1 text-xs" onClick={auth.signOut}>Sign Out</ActionButton>
+      </Panel>
+    );
+  }
+
+  return (
+    <Panel title="Sign In Required" accent="magenta">
+      <div className="mb-3 text-xs text-canaletto-lavender">Sign in as a tournament director or the authorized streaming operator to control the TV overlay.</div>
+      <div className="max-w-xs space-y-2">
+        <input className="input" type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <input className="input" type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <ActionButton variant="outline" className="px-3 py-1 text-xs" onClick={() => auth.signIn(email, password)}>Sign In</ActionButton>
+      </div>
+      {auth.error && <div className="mt-2 text-xs text-canaletto-magenta">{auth.error}</div>}
+    </Panel>
+  );
+};
+
 export const TvScoreControlPage = () => {
-  const event = useCanalettoEventReadOnly();
-  const { liveState, run } = useCanalettoLiveState();
+  const event = useCloudPublicEvent();
+  const { liveState, run, canWrite, auth } = useCloudLiveState();
   const resolved = resolveTvMatch(event, liveState);
   const score = getCurrentTvScore(liveState);
 
@@ -108,47 +144,53 @@ export const TvScoreControlPage = () => {
           <PageHeader eyebrow="Broadcast" title="TV Overlay Score Control" subtitle="Independent of official tournament results — for streaming staff only." />
         </div>
 
-        <StaffTvMatchSelector event={event} liveState={liveState} run={run} />
+        {!canWrite && <SignInGate auth={auth} />}
 
-        {!resolved && (
-          <Panel>
-            <div className="text-canaletto-lavender">
-              No TV match selected yet. Pick a current match above, or ask the tournament director to pick one on the Canaletto app's <span className="font-semibold text-canaletto-cream">LIVE</span> tab.
-            </div>
-          </Panel>
-        )}
-
-        {resolved && (
+        {canWrite && (
           <>
-            <Panel title={`${resolved.sourceLabel}${resolved.tbl ? ` — ${resolved.tbl}` : ''}`} accent="magenta">
-              <div className="mb-4 text-center font-condensed text-lg font-black uppercase text-canaletto-cream">
-                {resolved.p1.name} <span className="text-canaletto-magenta">vs</span> {resolved.p2.name}
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <ScoreStepper
-                  label={resolved.p1.name}
-                  value={score.r1}
-                  onChange={(r1) => run(setTvScore, { r1, r2: score.r2 })}
-                />
-                <ScoreStepper
-                  label={resolved.p2.name}
-                  value={score.r2}
-                  onChange={(r2) => run(setTvScore, { r1: score.r1, r2 })}
-                />
-              </div>
-              <div className="mt-4 flex justify-center">
-                <ActionButton
-                  variant="outline"
-                  className="px-3 py-1 text-xs"
-                  onClick={() => run(setTvScore, { r1: 0, r2: 0 })}
-                >
-                  Reset to 0–0
-                </ActionButton>
-              </div>
-            </Panel>
-            <div className="mt-3 text-center text-xs text-canaletto-lavender">
-              This is the broadcast overlay score only, kept per match — it never reads from or writes to official tournament results.
-            </div>
+            <StaffTvMatchSelector event={event} liveState={liveState} run={run} />
+
+            {!resolved && (
+              <Panel>
+                <div className="text-canaletto-lavender">
+                  No TV match selected yet. Pick a current match above, or ask the tournament director to pick one on the Canaletto app's <span className="font-semibold text-canaletto-cream">LIVE</span> tab.
+                </div>
+              </Panel>
+            )}
+
+            {resolved && (
+              <>
+                <Panel title={`${resolved.sourceLabel}${resolved.tbl ? ` — ${resolved.tbl}` : ''}`} accent="magenta">
+                  <div className="mb-4 text-center font-condensed text-lg font-black uppercase text-canaletto-cream">
+                    {resolved.p1.name} <span className="text-canaletto-magenta">vs</span> {resolved.p2.name}
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <ScoreStepper
+                      label={resolved.p1.name}
+                      value={score.r1}
+                      onChange={(r1) => run(setTvScore, { r1, r2: score.r2 })}
+                    />
+                    <ScoreStepper
+                      label={resolved.p2.name}
+                      value={score.r2}
+                      onChange={(r2) => run(setTvScore, { r1: score.r1, r2 })}
+                    />
+                  </div>
+                  <div className="mt-4 flex justify-center">
+                    <ActionButton
+                      variant="outline"
+                      className="px-3 py-1 text-xs"
+                      onClick={() => run(setTvScore, { r1: 0, r2: 0 })}
+                    >
+                      Reset to 0–0
+                    </ActionButton>
+                  </div>
+                </Panel>
+                <div className="mt-3 text-center text-xs text-canaletto-lavender">
+                  This is the broadcast overlay score only, kept per match — it never reads from or writes to official tournament results.
+                </div>
+              </>
+            )}
           </>
         )}
       </div>

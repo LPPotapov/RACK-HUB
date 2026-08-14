@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Sidebar } from './Sidebar.jsx';
 import { useCanalettoEvent } from './useCanalettoEvent.js';
+import { useCanalettoCloudMirror } from './useCanalettoCloudMirror.js';
 import { EventPage } from './pages/EventPage.jsx';
 import { PlayersPage } from './pages/PlayersPage.jsx';
 import { BlockPage } from './pages/BlockPage.jsx';
@@ -9,6 +10,10 @@ import { LivePage } from './pages/LivePage.jsx';
 
 function CanalettoApp() {
   const { event, run, error, clearError } = useCanalettoEvent();
+  // Additive: mirrors `event` to/from Firebase while signed in as an
+  // authorized director; a pure local no-op otherwise (signed out, or
+  // Firebase not configured) — see useCanalettoCloudMirror.js.
+  const cloudAuth = useCanalettoCloudMirror(event, run);
   const [page, setPage] = useState('event');
 
   return (
@@ -21,7 +26,7 @@ function CanalettoApp() {
             <button type="button" onClick={clearError} className="font-bold uppercase">Dismiss</button>
           </div>
         )}
-        {page === 'event' && <EventPage event={event} run={run} onNavigate={setPage} />}
+        {page === 'event' && <EventPage event={event} run={run} onNavigate={setPage} cloudAuth={cloudAuth} />}
         {page === 'players' && <PlayersPage event={event} run={run} onNavigate={setPage} />}
         {page === 'blockA' && <BlockPage event={event} run={run} block="A" />}
         {page === 'blockB' && <BlockPage event={event} run={run} block="B" />}

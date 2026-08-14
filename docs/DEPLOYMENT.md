@@ -53,11 +53,13 @@ The operator should be able to continue controlling/recovering the tournament ev
 
 ## Hosting decision
 
-No production backend stack is considered final yet.
+No general-purpose production backend stack is considered final yet.
 
-Existing IONOS infrastructure is a likely deployment target, but the implementation choice should be made only after the M2 backend/API shape is known and the actual hosting capabilities are confirmed.
+For the Canaletto Cup 2026 event specifically, Firebase (Realtime Database + Auth + Hosting) has been adopted as the concrete sync/hosting technology ahead of a general M2 backend — see `docs/decisions/0005-firebase-realtime-backend.md`. This is an event-scoped decision, not a claim that Firebase is RACK HUB's permanent backend.
 
-The architecture must avoid coupling the BBS/domain engine to IONOS, a particular database, or a specific server runtime.
+Existing IONOS infrastructure remains a candidate for a later general-purpose deployment target, but that choice should still be made only after the M2 backend/API shape is known and the actual hosting capabilities are confirmed.
+
+The architecture must avoid coupling the BBS/domain engine to IONOS, Firebase, a particular database, or a specific server runtime — ADR 0005 confirms `src/domain/`/`src/application/` remain free of any such dependency; only `src/firebase/` and the React layer know Firebase exists.
 
 ## Data protection and recovery
 

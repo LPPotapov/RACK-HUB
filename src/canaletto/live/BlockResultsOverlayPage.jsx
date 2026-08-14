@@ -5,10 +5,10 @@
 
 import { getBlockResultsRows } from '../../application/canalettoEvent.js';
 import { OverlayHeader, OverlayShell, TwoColumnStandings } from './liveComponents.jsx';
-import { useCanalettoEventReadOnly } from './useCanalettoEventReadOnly.js';
+import { useCloudPublicEvent } from './useCloudPublicEvent.js';
 
 export const BlockResultsOverlayPage = ({ block }) => {
-  const event = useCanalettoEventReadOnly();
+  const event = useCloudPublicEvent();
   const rows = getBlockResultsRows(event, block);
 
   return (

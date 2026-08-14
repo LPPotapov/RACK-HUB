@@ -12,6 +12,7 @@ import {
 import { parseEuDateTimeInputs, toEuDateInputValue, toEuTimeInputValue } from '../schedule.js';
 import { TableConfigModal } from '../TableConfigModal.jsx';
 import { BackupDataPanel } from '../BackupControls.jsx';
+import { CloudSyncPanel } from '../CloudSyncPanel.jsx';
 import { ActionButton, Panel, PageHeader, StatusBadge } from '../ui.jsx';
 
 const SCHEDULE_GROUPS = [
@@ -170,7 +171,7 @@ const BlockCard = ({ label, status, playerCount, roundLine }) => (
   </Panel>
 );
 
-export const EventPage = ({ event, run, onNavigate }) => {
+export const EventPage = ({ event, run, onNavigate, cloudAuth }) => {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(event.settings);
   const [showTableConfig, setShowTableConfig] = useState(false);
@@ -208,7 +209,10 @@ export const EventPage = ({ event, run, onNavigate }) => {
         subtitle={[event.settings.venue, event.settings.date].filter(Boolean).join(' · ') || 'Set venue/date in Event Settings'}
       />
 
-      <BackupDataPanel event={event} run={run} source="event" />
+      <div className="flex flex-wrap gap-2">
+        <BackupDataPanel event={event} run={run} source="event" />
+        <CloudSyncPanel event={event} run={run} auth={cloudAuth} />
+      </div>
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <button type="button" onClick={() => onNavigate('blockA')} className="text-left">

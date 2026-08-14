@@ -29,7 +29,7 @@ import { frozenMatchDisplay } from '../matchDisplay.js';
 import { BracketOverview } from '../koUi.jsx';
 import { MatchSummaryCard, PageHeader, Panel, SectionHeader, StatusBadge } from '../ui.jsx';
 import { LiveBrandMark, TwoColumnStandings } from './liveComponents.jsx';
-import { useCanalettoEventReadOnly } from './useCanalettoEventReadOnly.js';
+import { useCloudPublicEvent } from './useCloudPublicEvent.js';
 
 const MATCH_GRID_CLASSES = 'grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4';
 
@@ -233,7 +233,7 @@ const Top16Section = ({ event }) => {
 };
 
 export const LivescorePage = () => {
-  const event = useCanalettoEventReadOnly();
+  const event = useCloudPublicEvent();
   const [section, setSection] = useState('players');
 
   return (

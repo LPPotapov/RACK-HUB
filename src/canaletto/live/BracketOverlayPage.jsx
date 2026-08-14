@@ -6,10 +6,10 @@
 import { getBracketProjection } from '../../application/canalettoEvent.js';
 import { BracketOverview } from '../koUi.jsx';
 import { OverlayHeader, OverlayShell } from './liveComponents.jsx';
-import { useCanalettoEventReadOnly } from './useCanalettoEventReadOnly.js';
+import { useCloudPublicEvent } from './useCloudPublicEvent.js';
 
 export const BracketOverlayPage = () => {
-  const event = useCanalettoEventReadOnly();
+  const event = useCloudPublicEvent();
   const projection = getBracketProjection(event);
   const gbrConfig = event.blockA.tournament.config;
 

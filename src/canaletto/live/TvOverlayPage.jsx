@@ -57,17 +57,22 @@
 
 import { getCurrentTvScore, resolveTvMatch } from '../../application/canalettoLive.js';
 import { LiveBrandMark } from './liveComponents.jsx';
-import { useCanalettoEventReadOnly } from './useCanalettoEventReadOnly.js';
-import { useCanalettoLiveState } from '../useCanalettoLiveState.js';
+import { useCloudPublicEvent } from './useCloudPublicEvent.js';
+import { useCloudLiveState } from './useCloudLiveState.js';
 
 // No overlay panel shown at all when nothing is selected — an OBS Browser
 // Source cropped to this page should simply show nothing (transparent),
 // not a placeholder banner, once a real broadcast is live.
 const EmptyOverlay = () => <div className="min-h-screen bg-transparent" />;
 
+// Cross-machine (Canaletto Cup 2026 cloud sync pass): event comes from the
+// public Realtime Database projection, liveState (tvMatch/tvScores) from
+// the separate `live` node — same two sources every other cross-machine
+// public/OBS page and TvScoreControlPage.jsx use. Read-only here; `run` is
+// intentionally unused (this page never writes).
 export const TvOverlayPage = () => {
-  const event = useCanalettoEventReadOnly();
-  const { liveState } = useCanalettoLiveState();
+  const event = useCloudPublicEvent();
+  const { liveState } = useCloudLiveState();
   const resolved = resolveTvMatch(event, liveState);
 
   if (!resolved) return <EmptyOverlay />;

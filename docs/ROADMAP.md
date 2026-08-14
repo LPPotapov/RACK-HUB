@@ -150,6 +150,8 @@ The exact implementation may differ, but the boundaries are mandatory.
 
 ## M3 — Live Broadcasting Skeleton
 
+**Note:** for the Canaletto Cup 2026 event specifically, cross-machine live sync has been implemented ahead of this milestone's formal completion, using Firebase Realtime Database rather than the general M2 backend/API this milestone assumes — see `docs/decisions/0005-firebase-realtime-backend.md`. This does not change M3's status below; the general-purpose backend/API this milestone describes still does not exist.
+
 ### Goal
 
 Build the pages and data flow that need to update live, initially on localhost.

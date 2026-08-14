@@ -15,10 +15,10 @@
 import { getBlockStandings } from '../../application/canalettoEvent.js';
 import { StandingsTable } from '../ui.jsx';
 import { LiveBrandMark } from './liveComponents.jsx';
-import { useCanalettoEventReadOnly } from './useCanalettoEventReadOnly.js';
+import { useCloudPublicEvent } from './useCloudPublicEvent.js';
 
 export const Top12OverlayPage = ({ block }) => {
-  const event = useCanalettoEventReadOnly();
+  const event = useCloudPublicEvent();
   const standings = getBlockStandings(event, block).slice(0, 12);
 
   return (

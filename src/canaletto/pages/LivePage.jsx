@@ -9,7 +9,7 @@
 // list which current Block/KO matches exist to choose from (via
 // getTvSelectableMatches()).
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   clearTvMatch,
   getTvSelectableMatches,
@@ -19,6 +19,8 @@ import {
 } from '../../application/canalettoLive.js';
 import { buildLiveUrl, LIVE_LINKS } from '../live/liveLinks.js';
 import { useCanalettoLiveState } from '../useCanalettoLiveState.js';
+import { writeLiveState } from '../../firebase/canalettoCloudSync.js';
+import { useFirebaseAuth } from '../../firebase/useFirebaseAuth.js';
 import { ActionButton, PageHeader, Panel } from '../ui.jsx';
 
 // One key per row, works for both Block ({source,block,roundNumber,matchId})
@@ -29,6 +31,17 @@ const TvMatchSelector = ({ event }) => {
   const { liveState, run } = useCanalettoLiveState();
   const rows = getTvSelectableMatches(event);
   const selected = liveState.tvMatch;
+
+  // Mirror this page's local TV-match/score writes out to
+  // `/events/canaletto2026/live` while signed in as an authorized director
+  // — additive, same "local stays primary, cloud is a best-effort mirror"
+  // principle as useCanalettoCloudMirror.js. Local `useCanalettoLiveState`
+  // above (localStorage + same-browser `storage` event) is untouched.
+  const cloudAuth = useFirebaseAuth();
+  useEffect(() => {
+    if (!cloudAuth.isDirector) return;
+    writeLiveState(liveState);
+  }, [liveState, cloudAuth.isDirector]);
 
   return (
     <Panel title="TV Match" accent="magenta">
