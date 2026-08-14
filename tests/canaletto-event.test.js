@@ -147,7 +147,7 @@ test('one locked block does not make Top16 ready', () => {
   event = lockBlock(event, 'A');
   assert.equal(getTop16Status(event), 'WAITING_FOR_B');
   assert.throws(() => computeTop16Seeding(event), /both Block A and Block B/);
-  assert.throws(() => startTop16(event), /both/);
+  assert.throws(() => startTop16(event), /Both Block A and Block B/);
 });
 
 test('both blocks locked makes Top16 READY and generates the exact 8 seed pairings', () => {
@@ -172,7 +172,7 @@ test('both blocks locked makes Top16 READY and generates the exact 8 seed pairin
   ]);
 });
 
-test('TOP 16 STARTEN only becomes available once both blocks are locked, and flips top16.started', () => {
+test('TOP 16 STARTEN only becomes available once both blocks are locked, and generates 8 real matches', () => {
   let event = eventWithRosters(16);
   event = updateCanalettoSettings(event, { qualificationThreshold: 8 });
   event = startBlock(event, 'A');
@@ -181,9 +181,9 @@ test('TOP 16 STARTEN only becomes available once both blocks are locked, and fli
   event = completeCurrentRound(event, 'B');
   event = lockBlock(event, 'A');
   event = lockBlock(event, 'B');
-  assert.equal(event.top16.started, false);
+  assert.equal(event.ko.top16, null);
   event = startTop16(event);
-  assert.equal(event.top16.started, true);
+  assert.equal(event.ko.top16.matches.length, 8);
   assert.equal(getTop16Status(event), 'RUNNING');
 });
 

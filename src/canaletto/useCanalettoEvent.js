@@ -5,7 +5,7 @@
 // still happens inside the pure canalettoEvent.js functions.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { createCanalettoEvent, validateCanalettoEvent } from '../application/canalettoEvent.js';
+import { SCHEDULE_KEYS, createCanalettoEvent, validateCanalettoEvent } from '../application/canalettoEvent.js';
 
 const STORAGE_KEY = 'canaletto-event-v1';
 
@@ -19,6 +19,15 @@ const loadInitialEvent = () => {
       console.warn('Canaletto: stored event failed validation, starting fresh', result.errors);
       return createCanalettoEvent();
     }
+    // Migration shim: an event saved before the KO engine existed has no
+    // `ko` field at all — validateCanalettoEvent() tolerates its absence
+    // (like the table-confirmation lists), but every KO command reads
+    // `event.ko[stage]` unconditionally, so backfill it here rather than
+    // scattering `event.ko || ...` fallbacks through canalettoEvent.js.
+    if (!parsed.ko) parsed.ko = { top16: null, quarterfinals: null, semifinals: null, final: null };
+    // Same shim for `schedule` (director correction pass): an event saved
+    // before estimated schedule fields existed has none.
+    if (!parsed.schedule) parsed.schedule = Object.fromEntries(SCHEDULE_KEYS.map((key) => [key, { start: '', end: '' }]));
     return parsed;
   } catch (e) {
     console.warn('Canaletto: could not restore stored event, starting fresh', e);

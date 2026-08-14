@@ -48,7 +48,14 @@
 //     blockB: ApplicationState,
 //     blockALock: null | { lockedAt, qualifiers: [Qualifier] },
 //     blockBLock: null | { lockedAt, qualifiers: [Qualifier] },
-//     top16: { started: boolean, startedAt: string | null }
+//     ko: { top16, quarterfinals, semifinals, final }  // each null | KoStage,
+//                                                        // see canalettoKo.js
+//     schedule: { blockA, blockB, top16Slot1, top16Slot2,
+//                  quarterfinals, semifinals, final }    // each { start, end },
+//                  // OPTIONAL planning-only estimates (director correction
+//                  // pass) — plain local-datetime strings from an
+//                  // <input type="datetime-local">, '' when unset. Never
+//                  // read by any tournament-operation gate/command.
 //   }
 //
 // Qualifier (frozen at lock time, never recomputed afterward):
@@ -74,6 +81,24 @@ import {
   recordMatchResult as recordMatchResultCommand,
   startTournament as startTournamentCommand
 } from './tournamentCommands.js';
+import {
+  DEFAULT_KO_GBR_WEIGHT,
+  KO_DEFAULT_TABLE_COUNT,
+  KO_RACE_TO,
+  KO_STAGE_ORDER,
+  assignKoMatchTable as assignKoMatchTableOp,
+  buildBracketProjection,
+  buildKoPlayerSummary,
+  buildKoResultsRows,
+  buildNextStagePairings,
+  confirmKoStageTables as confirmKoStageTablesOp,
+  createKoStage,
+  deriveKoRatingSimulation,
+  editKoStageTables as editKoStageTablesOp,
+  getKoChampion as getKoChampionOp,
+  isKoStageComplete,
+  recordKoMatchResult as recordKoMatchResultOp
+} from './canalettoKo.js';
 
 // RESULTS/QUALIFICATION order only (see header note above) — director
 // decision: MP desc -> RackDiff desc -> PERF desc -> id fallback. This is
@@ -136,6 +161,20 @@ const createBlockConfig = (settings) => createConfig({
   ranking_system: CANALETTO_RANKING_SYSTEM
 });
 
+// Every KO stage starts unstarted (null). Present, not undefined, on every
+// event so downstream readers never have to guess between "not built yet"
+// and "not started yet" — see canalettoKo.js for the KoStage shape a
+// non-null value holds.
+const EMPTY_KO = { top16: null, quarterfinals: null, semifinals: null, final: null };
+
+// Estimated schedule groups (director correction pass, item 5) — Top16 is
+// split into its two operational timeslots here too, matching how it's
+// actually played, even though it remains ONE KO stage/bracket round in
+// `event.ko`.
+export const SCHEDULE_KEYS = ['blockA', 'blockB', 'top16Slot1', 'top16Slot2', 'quarterfinals', 'semifinals', 'final'];
+
+const EMPTY_SCHEDULE = Object.fromEntries(SCHEDULE_KEYS.map((key) => [key, { start: '', end: '' }]));
+
 const createEmptyBlock = (settings, label) => {
   const config = createBlockConfig(settings);
   return createApplicationState({
@@ -164,8 +203,42 @@ export const createCanalettoEvent = ({ settings: settingsOverrides, ...settingsS
     blockBLock: null,
     blockATableConfirmations: [],
     blockBTableConfirmations: [],
-    top16: { started: false, startedAt: null }
+    ko: EMPTY_KO,
+    schedule: EMPTY_SCHEDULE,
+    koGbrWeight: DEFAULT_KO_GBR_WEIGHT
   };
+};
+
+// Single-KO GBR weight (docs task item 17-22) — an event-level setting,
+// deliberately NOT gated by canEditSettings()/settings-lock: unlike
+// settings, this never feeds Block A/B calculation at all (Block A/B never
+// call canalettoKo.js), and by the time KO exists both blocks are already
+// LOCKED (canEditSettings() would already read false), so gating this
+// behind the same lock would make it uneditable in practice for its entire
+// useful window — the director needs to be able to tune it while
+// calibrating against real Top16 results, potentially between KO stages.
+// `getKoGbrWeight()` resolves an absent/non-numeric value (older/restored
+// state predating this field) to DEFAULT_KO_GBR_WEIGHT — never throws, never
+// silently leaves the value undefined for a caller to mishandle.
+export const getKoGbrWeight = (event) => (typeof event.koGbrWeight === 'number' && !Number.isNaN(event.koGbrWeight) ? event.koGbrWeight : DEFAULT_KO_GBR_WEIGHT);
+
+export const updateKoGbrWeight = (event, weight) => {
+  const n = Number(weight);
+  if (!Number.isFinite(n) || n < 0 || n > 1) {
+    throw new Error(`updateKoGbrWeight: weight must be a number between 0 and 1 (got ${weight})`);
+  }
+  return { ...event, koGbrWeight: n };
+};
+
+// Estimated/planning-only — never gates or is read by any tournament-
+// operation command (docs task item 5). `start`/`end` are optional; an
+// omitted value is stored as '' rather than left undefined, so every
+// schedule group always has the same shape.
+export const updateCanalettoSchedule = (event, key, { start = '', end = '' } = {}) => {
+  if (!SCHEDULE_KEYS.includes(key)) {
+    throw new Error(`updateCanalettoSchedule: invalid schedule key "${key}"`);
+  }
+  return { ...event, schedule: { ...event.schedule, [key]: { start, end } } };
 };
 
 // ---------------------------------------------------------------------------
@@ -540,7 +613,15 @@ export const lockBlock = (event, block) => {
       mp: p.mp,
       diff: (p.racksWon || 0) - (p.racksLost || 0),
       perf: p.perfCount > 0 ? p.perf / p.perfCount : 0,
-      gbr: p.elo,
+      // Rounded to a whole integer HERE (GBR_INTEGER_RULE — see
+      // canalettoKo.js's header comment): this is the ONLY value that
+      // actually feeds Top16 KO math (every later KO stage's PRE GBR
+      // descends from this one), so it must already be integer at the
+      // moment it's frozen — never a display-only rounding. The Block's
+      // own live standings/pairing/ranking below (`getBlockStandings()`)
+      // still use the player's full-precision `elo` completely unaffected;
+      // only this frozen KO-facing snapshot is rounded.
+      gbr: Math.round(p.elo),
       startingGbr: p.startingGbr,
       deltaGbr: p.deltaGbr
     }));
@@ -589,7 +670,7 @@ export const getBlockResultsRows = (event, block) => {
 // where it would be relaxed.
 export const canUnlockBlock = (event, block) => {
   if (!event[lockKey(block)]) return { ok: false, reason: `Block ${block} is not locked` };
-  if (event.top16.started) return { ok: false, reason: 'Top 16 has already started — cannot unlock a source block' };
+  if (event.ko.top16) return { ok: false, reason: 'Top 16 has already started — cannot unlock a source block' };
   return { ok: true, reason: null };
 };
 
@@ -620,7 +701,7 @@ export const unlockBlock = (event, block) => {
 // sourced from this block) Top16's started state. Same Top16-started guard
 // as unlockBlock() above, for the same reason.
 export const canResetBlockTournament = (event, block) => {
-  if (event.top16.started) return { ok: false, reason: 'Top 16 has already started — cannot reset a source block' };
+  if (event.ko.top16) return { ok: false, reason: 'Top 16 has already started — cannot reset a source block' };
   return { ok: true, reason: null };
 };
 
@@ -648,7 +729,7 @@ export const resetBlockTournament = (event, block) => {
     [key]: createApplicationState({ tournament: resetTournament }),
     [lockKey(block)]: null,
     [tableConfirmationsKey(block)]: [],
-    top16: { started: false, startedAt: null }
+    ko: EMPTY_KO
   };
 };
 
@@ -657,7 +738,7 @@ export const resetBlockTournament = (event, block) => {
 // ---------------------------------------------------------------------------
 
 export const getTop16Status = (event) => {
-  if (event.top16.started) return 'RUNNING';
+  if (event.ko.top16) return 'RUNNING';
   const aLocked = !!event.blockALock;
   const bLocked = !!event.blockBLock;
   if (aLocked && bLocked) return 'READY';
@@ -723,37 +804,195 @@ export const getTop16Seeding = (event) => {
   return pairings;
 };
 
-export const startTop16 = (event) => {
-  if (event.top16.started) {
-    throw new Error('startTop16: Top 16 has already started');
-  }
-  // Throws if not both locked / seeding isn't exactly 8v8 — validated before
-  // any state change, matching every other command's atomicity here.
-  computeTop16Seeding(event);
-  return { ...event, top16: { started: true, startedAt: new Date().toISOString() } };
+// Full 4-stage bracket PROJECTION (director correction pass — "show the
+// full tree at all times"): every one of the 15 bracket positions, with
+// future/not-yet-generated stages filled by DERIVED preview slots (source
+// labels or already-known participants) rather than by generating real
+// QF/SF/Final match data early. Never creates or mutates any KO stage —
+// purely a read. See buildBracketProjection() in canalettoKo.js for the
+// full slot-resolution rules.
+export const getBracketProjection = (event) => buildBracketProjection(event.ko, getTop16Seeding(event));
+
+// ---------------------------------------------------------------------------
+// KO progression — Top16 -> Quarterfinals -> Semifinals -> Final.
+//
+// A KO stage lives at `event.ko[stage]` (null until started; see
+// canalettoKo.js for the KoStage/KoMatch shapes). Every stage-generation
+// command is EXPLICIT (docs task item 13/33) — completing the last match of
+// a stage never auto-creates the next one; the director calls
+// startKoStage(event, nextStage) once ready.
+// ---------------------------------------------------------------------------
+
+const koStageIndex = (stage) => {
+  const i = KO_STAGE_ORDER.indexOf(stage);
+  if (i === -1) throw new Error(`Invalid KO stage "${stage}"`);
+  return i;
 };
 
-// Danger Zone — Reset Top16 (bug fix: previously there was no way back once
-// Top16 was started — unlockBlock()/resetBlockTournament() both correctly
-// refuse to touch a source block while top16.started is true, but nothing
-// could ever clear that flag again, permanently locking the director out of
-// both blocks' Danger Zone actions). Safe to reset unconditionally: full KO
-// progression is not implemented yet, so "started" is currently only a flag
-// with no bracket/match data behind it — resetting it loses nothing but the
-// flag and its timestamp. Once real KO progression exists, this action (and
-// the guards above) will need to account for in-progress bracket data; that
-// is explicitly out of scope here.
-export const canResetTop16 = (event) => {
-  if (!event.top16.started) return { ok: false, reason: 'Top 16 has not started' };
+export const canStartKoStage = (event, stage) => {
+  const idx = koStageIndex(stage);
+  if (event.ko[stage]) return { ok: false, reason: `${stage} has already started` };
+  if (stage === 'top16') {
+    const status = getTop16Status(event);
+    if (status !== 'READY') return { ok: false, reason: 'Both Block A and Block B must be locked first' };
+    return { ok: true, reason: null };
+  }
+  const previousStage = KO_STAGE_ORDER[idx - 1];
+  if (!isKoStageComplete(event.ko[previousStage])) {
+    return { ok: false, reason: `${previousStage} is not complete yet` };
+  }
   return { ok: true, reason: null };
 };
 
-export const resetTop16 = (event) => {
-  const eligibility = canResetTop16(event);
+// Generates the ACTUAL matches for `stage` (docs task item 11 — not merely a
+// boolean): Top16 pairings come from the frozen Block A/B seed slots
+// (computeTop16Seeding — exact, never reseeded); every later stage's
+// pairings come from buildNextStagePairings() on the PREVIOUS stage's own
+// completed matches, in stored bracket order, carrying the winner's updated
+// GBR forward as that match's frozen pre-match snapshot (see canalettoKo.js).
+// Tables default to the first `KO_DEFAULT_TABLE_COUNT[stage]` configured
+// event tables, in their existing order (docs task item 21) — never
+// hardcoded by label.
+export const startKoStage = (event, stage) => {
+  const eligibility = canStartKoStage(event, stage);
   if (!eligibility.ok) {
-    throw new Error(`resetTop16: cannot reset Top 16: ${eligibility.reason}`);
+    throw new Error(`startKoStage: cannot start ${stage}: ${eligibility.reason}`);
   }
-  return { ...event, top16: { started: false, startedAt: null } };
+  const idx = koStageIndex(stage);
+  const pairings = stage === 'top16'
+    ? computeTop16Seeding(event)
+    : buildNextStagePairings(event.ko[KO_STAGE_ORDER[idx - 1]]);
+  const tableLabels = event.tables.map((t) => t.label).slice(0, KO_DEFAULT_TABLE_COUNT[stage]);
+  return { ...event, ko: { ...event.ko, [stage]: createKoStage(pairings, tableLabels) } };
+};
+
+// Backward-compatible, Top16-specific entry point over the generic
+// startKoStage() above.
+export const startTop16 = (event) => startKoStage(event, 'top16');
+
+// A stage's results stay correctable (docs task item 16) until the NEXT
+// stage has actually started — at that point winner propagation into the
+// next stage's frozen match snapshots is already committed, so a correction
+// here could no longer be reflected there without silently rewriting an
+// already-started later stage.
+export const canCorrectKoStage = (event, stage) => {
+  const idx = koStageIndex(stage);
+  const next = KO_STAGE_ORDER[idx + 1];
+  return !(next && event.ko[next]);
+};
+
+export const recordKoResult = (event, stage, { matchNumber, r1, r2 }) => {
+  if (!event.ko[stage]) throw new Error(`recordKoResult: ${stage} has not started`);
+  if (!canCorrectKoStage(event, stage)) {
+    throw new Error(`recordKoResult: ${stage} is locked — the next stage has already started`);
+  }
+  const target = KO_RACE_TO[stage];
+  // Shared d/k_m/k_r — Block A and Block B always agree on these (Canaletto
+  // settings only ever override max_games/default_rounds/format/
+  // ranking_system, never the GBR constants themselves; see
+  // createBlockConfig()), so either source is equivalent. No new constants.
+  const gbrConfig = event.blockA.tournament.config;
+  const updatedStage = recordKoMatchResultOp(event.ko[stage], { matchNumber, r1, r2 }, target, gbrConfig, getKoGbrWeight(event));
+  return { ...event, ko: { ...event.ko, [stage]: updatedStage } };
+};
+
+export const assignKoTable = (event, stage, { matchNumber, table }) => {
+  if (!event.ko[stage]) throw new Error(`assignKoTable: ${stage} has not started`);
+  if (!canCorrectKoStage(event, stage)) {
+    throw new Error(`assignKoTable: ${stage} is locked — the next stage has already started`);
+  }
+  if (event.ko[stage].tablesConfirmed) {
+    throw new Error(`assignKoTable: ${stage}'s tables are confirmed and frozen — use editKoTables() to unfreeze them first`);
+  }
+  return { ...event, ko: { ...event.ko, [stage]: assignKoMatchTableOp(event.ko[stage], matchNumber, table) } };
+};
+
+export const confirmKoTables = (event, stage) => {
+  if (!event.ko[stage]) throw new Error(`confirmKoTables: ${stage} has not started`);
+  return { ...event, ko: { ...event.ko, [stage]: confirmKoStageTablesOp(event.ko[stage]) } };
+};
+
+export const editKoTables = (event, stage) => {
+  if (!event.ko[stage]) throw new Error(`editKoTables: ${stage} has not started`);
+  return { ...event, ko: { ...event.ko, [stage]: editKoStageTablesOp(event.ko[stage]) } };
+};
+
+// Champion is DERIVED from the Final stage's own match data, never stored
+// separately — so a still-legal correction to the Final (docs task item 27)
+// can never leave a stale champion record behind.
+export const getKoChampion = (event) => getKoChampionOp(event.ko.final);
+
+// KO Results/calibration table rows (docs task item 11) — DERIVED fresh from
+// `event.ko` on every call, never a separately stored/duplicated table (item
+// 22). `gbrConfig` is Block A's config, the same shared d/k_m/k_r source
+// recordKoResult() itself uses — see that command's own comment.
+export const getKoResultsRows = (event) => buildKoResultsRows(event.ko, event.blockA.tournament.config);
+
+// KO Player Summary (docs task item 29) — DERIVED fresh from `event.ko`,
+// never stored.
+export const getKoPlayerSummary = (event) => buildKoPlayerSummary(event.ko, event.blockA.tournament.config);
+
+// KO rating CALIBRATION PREVIEW (director bugfix pass, items 11-22): a pure,
+// read-only sequential replay of the whole bracket at an arbitrary
+// `multiplier`, independent of whatever each match's OWN stored
+// rawDelta/appliedDelta/postGbr actually is — see deriveKoRatingSimulation()
+// in canalettoKo.js for why this is not simply "multiply the stored
+// deltas". Never mutates `event`; the caller (Top16Page.jsx) drives this
+// with local-only UI state, never `run()`/store commits, so typing in the
+// preview field can never rewrite stored scores/bracket/settings.
+export const getKoRatingSimulation = (event, multiplier) => deriveKoRatingSimulation(event.ko, event.blockA.tournament.config, multiplier);
+
+// Champion's own row from the player summary, merged with getKoChampion()'s
+// identity/final-score fields (docs task item 30) — the single most
+// important calibration number: how much APPLIED KO GBR the eventual
+// champion accumulated across their whole four-match run. `null` until the
+// Final is complete (matches getKoChampion()'s own null-until-complete
+// contract).
+export const getKoChampionSummary = (event) => {
+  const champion = getKoChampion(event);
+  if (!champion) return null;
+  const summary = getKoPlayerSummary(event).find((p) => p.playerId === champion.playerId);
+  return { ...champion, startGbr: summary.startGbr, currentGbr: summary.currentGbr, totalDeltaGbr: summary.totalDeltaGbr };
+};
+
+// The furthest-advanced KO stage that has actually started — the one
+// "RESET CURRENT KO STAGE" (below) walks back exactly one step from.
+export const getCurrentKoStage = (event) => {
+  for (let i = KO_STAGE_ORDER.length - 1; i >= 0; i--) {
+    if (event.ko[KO_STAGE_ORDER[i]]) return KO_STAGE_ORDER[i];
+  }
+  return null;
+};
+
+// ---------------------------------------------------------------------------
+// Danger Zone — Reset Current KO Stage (docs task item 17/19: ONE
+// understandable recovery model, replacing the old boolean-only
+// resetTop16()/canResetTop16() pair now that real KO stages/matches exist).
+// Deletes ONLY the furthest-advanced started stage's matches, reopening the
+// stage before it for correction:
+//   current = final          -> delete Final, reopen completed Semifinals
+//   current = semifinals     -> delete Semifinals, reopen completed Quarterfinals
+//   current = quarterfinals  -> delete Quarterfinals, reopen completed Top16
+//   current = top16          -> delete Top16 (back to pre-start; re-enables
+//                                 Block A/B Unlock/Reset again, matching the
+//                                 old resetTop16() bug-fix behavior exactly)
+// NEVER touches blockALock/blockBLock/qualifiers or either block's
+// tournament state — only ever replaces one key under `event.ko`.
+// ---------------------------------------------------------------------------
+
+export const canResetKoStage = (event) => {
+  const stage = getCurrentKoStage(event);
+  if (!stage) return { ok: false, reason: 'No KO stage has started' };
+  return { ok: true, reason: null };
+};
+
+export const resetKoStage = (event) => {
+  const eligibility = canResetKoStage(event);
+  if (!eligibility.ok) {
+    throw new Error(`resetKoStage: cannot reset current KO stage: ${eligibility.reason}`);
+  }
+  const stage = getCurrentKoStage(event);
+  return { ...event, ko: { ...event.ko, [stage]: null } };
 };
 
 // ---------------------------------------------------------------------------
@@ -776,6 +1015,36 @@ export const validateCanalettoEvent = (event) => {
   }
   if ('blockBTableConfirmations' in event && !Array.isArray(event.blockBTableConfirmations)) {
     errors.push('blockBTableConfirmations must be an array when present');
+  }
+  // Optional, like the table-confirmation lists above: an event saved before
+  // the KO engine existed won't have this field yet.
+  if ('ko' in event && event.ko !== null) {
+    if (typeof event.ko !== 'object' || Array.isArray(event.ko)) {
+      errors.push('ko must be a plain object when present');
+    } else {
+      KO_STAGE_ORDER.forEach((stage) => {
+        const stageState = event.ko[stage];
+        if (stageState === undefined || stageState === null) return;
+        if (typeof stageState !== 'object' || !Array.isArray(stageState.matches)) {
+          errors.push(`ko.${stage} must be null or a KoStage object with a matches array`);
+        }
+      });
+    }
+  }
+  // Optional, like `ko` above: an event saved before schedule estimates
+  // existed won't have this field yet.
+  if ('schedule' in event && event.schedule !== null) {
+    if (typeof event.schedule !== 'object' || Array.isArray(event.schedule)) {
+      errors.push('schedule must be a plain object when present');
+    } else {
+      SCHEDULE_KEYS.forEach((key) => {
+        const entry = event.schedule[key];
+        if (entry === undefined) return;
+        if (typeof entry !== 'object' || entry === null || typeof entry.start !== 'string' || typeof entry.end !== 'string') {
+          errors.push(`schedule.${key} must be an object with string start/end when present`);
+        }
+      });
+    }
   }
   ['blockA', 'blockB'].forEach((key) => {
     const result = validateApplicationState(event[key]);

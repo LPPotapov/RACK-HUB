@@ -90,6 +90,7 @@ const STATUS_STYLES = {
   RUNNING: 'bg-canaletto-magenta/15 text-canaletto-magenta border-canaletto-magenta/50',
   LOCKED: 'bg-canaletto-gold/15 text-canaletto-gold border-canaletto-gold/50',
   READY: 'bg-canaletto-gold/15 text-canaletto-gold border-canaletto-gold/50',
+  COMPLETE: 'bg-canaletto-gold/15 text-canaletto-gold border-canaletto-gold/50',
   WAITING_FOR_A: 'bg-canaletto-panel2 text-canaletto-lavender border-canaletto-border',
   WAITING_FOR_B: 'bg-canaletto-panel2 text-canaletto-lavender border-canaletto-border',
   WAITING_FOR_BOTH: 'bg-canaletto-panel2 text-canaletto-lavender border-canaletto-border'
@@ -100,6 +101,7 @@ const STATUS_LABELS = {
   RUNNING: 'Running',
   LOCKED: 'Locked',
   READY: 'Top 16 Ready',
+  COMPLETE: 'Complete',
   WAITING_FOR_A: 'Waiting for Block A',
   WAITING_FOR_B: 'Waiting for Block B',
   WAITING_FOR_BOTH: 'Waiting for Blocks'
@@ -131,8 +133,10 @@ export const ActionButton = ({ variant = 'gold', className = '', children, ...pr
 );
 
 // Mirrored left/right so a match card reads symmetrically out from the
-// center: "GBR · win%" on the left, "win% · GBR" on the right.
-const PlayerBlock = ({ name, gbr, winPct, align }) => {
+// center: "GBR · win%" on the left, "win% · GBR" on the right. Exported so
+// the KO bracket/match UI (koUi.jsx) can reuse it rather than duplicating
+// this presentation.
+export const PlayerBlock = ({ name, gbr, winPct, align }) => {
   const gbrPart = gbr != null && <span>GBR {Math.round(gbr)}</span>;
   const winPctPart = winPct != null && <span className="font-bold text-canaletto-gold">{Math.round(winPct)}%</span>;
   const dot = gbr != null && winPct != null && <span> · </span>;
@@ -439,7 +443,9 @@ export const MatchSummaryCard = ({ match, tablesConfirmed, p1Gbr, p2Gbr, p1WinPc
 // players currently inside it — this is a live-position indicator before
 // lock, and reflects the frozen order after lock (callers pass the frozen
 // qualifiers-as-players list post-lock).
-const formatDelta = (n) => {
+// Exported so the KO Results/calibration table (koUi.jsx) can reuse the same
+// whole-number +/- display convention rather than a second formatter.
+export const formatDelta = (n) => {
   const rounded = Math.round(n);
   if (rounded > 0) return `+${rounded}`;
   if (rounded < 0) return `${rounded}`;

@@ -1,13 +1,158 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   canEditSettings,
   getBlockStatus,
+  getKoGbrWeight,
   getTop16Status,
   setEventTables,
-  updateCanalettoSettings
+  updateCanalettoSchedule,
+  updateCanalettoSettings,
+  updateKoGbrWeight
 } from '../../application/canalettoEvent.js';
+import { parseEuDateTimeInputs, toEuDateInputValue, toEuTimeInputValue } from '../schedule.js';
 import { TableConfigModal } from '../TableConfigModal.jsx';
 import { ActionButton, Panel, PageHeader, StatusBadge } from '../ui.jsx';
+
+const SCHEDULE_GROUPS = [
+  { key: 'blockA', label: 'Block A' },
+  { key: 'blockB', label: 'Block B' },
+  { key: 'top16Slot1', label: 'Top 16 — Slot 1' },
+  { key: 'top16Slot2', label: 'Top 16 — Slot 2' },
+  { key: 'quarterfinals', label: 'Quarterfinals' },
+  { key: 'semifinals', label: 'Semifinals' },
+  { key: 'final', label: 'Final' }
+];
+
+// Plain EU-formatted text fields (DD.MM.YYYY + HH:MM), NOT a native
+// `<input type="datetime-local">` — that native widget's stored value is
+// locale-independent, but its RENDERED widget always follows the browser/OS
+// locale (MM/DD/YYYY + AM/PM on a US-locale machine), which is exactly the
+// "American format" this correction rules out for the input fields too, not
+// just the read-only display. There is no HTML/CSS way to force a native
+// date/time input's displayed format, so this field owns its own local text
+// state and commits through parseEuDateTimeInputs() whenever the typed text
+// forms a complete, valid value (partial typing — e.g. "14.08.2" — is kept
+// on-screen without committing, rather than being rejected/reset).
+const EuDateTimeField = ({ value, onChange }) => {
+  const [dateText, setDateText] = useState(() => toEuDateInputValue(value));
+  const [timeText, setTimeText] = useState(() => toEuTimeInputValue(value));
+
+  useEffect(() => {
+    setDateText(toEuDateInputValue(value));
+    setTimeText(toEuTimeInputValue(value));
+  }, [value]);
+
+  const commit = (nextDate, nextTime) => {
+    const parsed = parseEuDateTimeInputs(nextDate, nextTime);
+    if (parsed !== null) onChange(parsed);
+  };
+
+  return (
+    <div className="flex items-center gap-1">
+      <input
+        type="text"
+        inputMode="numeric"
+        placeholder="DD.MM.YYYY"
+        className="input w-24 text-center"
+        value={dateText}
+        onChange={(e) => { setDateText(e.target.value); commit(e.target.value, timeText); }}
+      />
+      <input
+        type="text"
+        inputMode="numeric"
+        placeholder="HH:MM"
+        className="input w-20 text-center"
+        value={timeText}
+        onChange={(e) => { setTimeText(e.target.value); commit(dateText, e.target.value); }}
+      />
+    </div>
+  );
+};
+
+// Shared compact modal chrome (matches TableConfigModal.jsx exactly) — used
+// by both TimeScheduleModal and KoGbrWeightModal so all three Event Settings
+// pop-ups (Table Configuration, Time Schedule, KO GBR Weight) look and
+// behave identically.
+const ModalShell = ({ title, maxWidth = 'max-w-xl', onClose, children }) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6">
+    <div className={`w-full ${maxWidth} max-h-[85vh] overflow-y-auto rounded border border-canaletto-border bg-canaletto-panel p-5 shadow-xl`}>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="font-condensed text-2xl font-black uppercase text-canaletto-cream">{title}</h2>
+        <button type="button" onClick={onClose} className="font-condensed text-xs font-bold uppercase text-canaletto-lavender hover:text-canaletto-cream">
+          Close
+        </button>
+      </div>
+      {children}
+    </div>
+  </div>
+);
+
+// Estimated schedule (director correction pass, item 5), now a pop-up modal
+// like Table Configuration rather than a permanent inline panel — optional,
+// simple EU-formatted date/time inputs (never American MM/DD/YYYY or
+// 12-hour AM/PM), never gating tournament operation. Commits directly on
+// change (no separate Save — Done just closes the already-live modal).
+const TimeScheduleModal = ({ event, run, onClose }) => (
+  <ModalShell title="Event Schedule (Estimated)" maxWidth="max-w-2xl" onClose={onClose}>
+    <div className="mb-3 text-xs text-canaletto-lavender">
+      Optional planning estimates (DD.MM.YYYY, 24h). Blank values are fine — tournament operation never depends on these.
+    </div>
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {SCHEDULE_GROUPS.map(({ key, label }) => {
+        const entry = event.schedule[key] || { start: '', end: '' };
+        return (
+          <div key={key} className="rounded border border-canaletto-border bg-canaletto-panel2 px-3 py-2">
+            <div className="mb-1 font-condensed text-xs font-bold uppercase tracking-widest text-canaletto-lavender">{label}</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <EuDateTimeField value={entry.start} onChange={(iso) => run(updateCanalettoSchedule, key, { start: iso, end: entry.end })} />
+              <span className="text-canaletto-lavender">–</span>
+              <EuDateTimeField value={entry.end} onChange={(iso) => run(updateCanalettoSchedule, key, { start: entry.start, end: iso })} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+    <div className="mt-4 flex justify-end">
+      <ActionButton variant="gold" onClick={onClose}>Done</ActionButton>
+    </div>
+  </ModalShell>
+);
+
+// Single-KO GBR Weight (docs task item 17-22), now a pop-up modal like
+// Table Configuration rather than a permanent inline panel — a compact,
+// ALWAYS-editable control (never gated by canEditSettings()/the settings
+// lock — see updateKoGbrWeight()'s own comment in canalettoEvent.js for
+// why). Director enters a whole percentage (0-100); stored internally as a
+// 0..1 fraction. Negative values are impossible to enter via `min="0"`;
+// values above 100 are clamped on commit rather than silently accepted.
+const KoGbrWeightModal = ({ event, run, onClose }) => {
+  const weightPct = Math.round(getKoGbrWeight(event) * 100);
+  return (
+    <ModalShell title="KO GBR Weight" maxWidth="max-w-md" onClose={onClose}>
+      <div className="mb-3 text-xs text-canaletto-lavender">
+        Applies ONLY to the Top16/QF/SF/Final knockout phase — Block A/B GBR is always full weight, unaffected. Default 50%.
+      </div>
+      <div className="flex items-center gap-1">
+        <input
+          type="number"
+          min="0"
+          max="100"
+          className="input w-20 text-right"
+          value={weightPct}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            if (!Number.isFinite(n)) return;
+            run(updateKoGbrWeight, Math.min(100, Math.max(0, n)) / 100);
+          }}
+        />
+        <span className="font-condensed text-sm font-bold text-canaletto-lavender">%</span>
+      </div>
+      <div className="mt-4 flex justify-end">
+        <ActionButton variant="gold" onClick={onClose}>Done</ActionButton>
+      </div>
+    </ModalShell>
+  );
+};
 
 const BlockCard = ({ label, status, playerCount, roundLine }) => (
   <Panel accent={status === 'RUNNING' ? 'magenta' : 'gold'}>
@@ -28,6 +173,8 @@ export const EventPage = ({ event, run, onNavigate }) => {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(event.settings);
   const [showTableConfig, setShowTableConfig] = useState(false);
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [showKoGbrWeight, setShowKoGbrWeight] = useState(false);
 
   const statusA = getBlockStatus(event, 'A');
   const statusB = getBlockStatus(event, 'B');
@@ -135,10 +282,13 @@ export const EventPage = ({ event, run, onNavigate }) => {
         )}
       </Panel>
 
-      <div className="mt-4 flex items-center gap-3">
+      <div className="mt-4 flex flex-wrap items-center gap-3">
         <ActionButton variant="outline" onClick={() => setShowTableConfig(true)}>Table Configuration</ActionButton>
+        <ActionButton variant="outline" onClick={() => setShowSchedule(true)}>Time Schedule</ActionButton>
+        <ActionButton variant="outline" onClick={() => setShowKoGbrWeight(true)}>KO GBR Weight</ActionButton>
         <span className="text-xs text-canaletto-lavender">
           {event.tables.length > 0 ? `${event.tables.length} tables configured` : 'No tables configured yet'}
+          {' · '}KO GBR Weight {Math.round(getKoGbrWeight(event) * 100)}%
         </span>
       </div>
 
@@ -148,6 +298,12 @@ export const EventPage = ({ event, run, onNavigate }) => {
           onSave={(tables) => run(setEventTables, tables)}
           onClose={() => setShowTableConfig(false)}
         />
+      )}
+      {showSchedule && (
+        <TimeScheduleModal event={event} run={run} onClose={() => setShowSchedule(false)} />
+      )}
+      {showKoGbrWeight && (
+        <KoGbrWeightModal event={event} run={run} onClose={() => setShowKoGbrWeight(false)} />
       )}
     </div>
   );

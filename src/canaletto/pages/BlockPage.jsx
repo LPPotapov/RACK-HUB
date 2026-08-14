@@ -18,6 +18,7 @@ import {
 } from '../../application/canalettoEvent.js';
 import { splitForTwoColumnDisplay } from '../layout.js';
 import { frozenMatchDisplay } from '../matchDisplay.js';
+import { formatScheduleRange } from '../schedule.js';
 import { AddPlayerModal } from '../AddPlayerModal.jsx';
 import { ManualPairingModal } from '../ManualPairingModal.jsx';
 import { DangerZone } from '../DangerZone.jsx';
@@ -269,11 +270,17 @@ export const BlockPage = ({ event, run, block }) => {
   const status = getBlockStatus(event, block);
   const [subView, setSubView] = useState('round');
   const [viewingRound, setViewingRound] = useState(tournament.currentRound || 1);
+  // Compact estimated-schedule readout (director correction pass, item
+  // 3/32) — planning metadata only, never a large banner, and never read by
+  // any operation gate. Same formatScheduleRange() helper KO uses, so the
+  // format (European DD.MM.YYYY · 24h HH:MM) is identical everywhere.
+  const scheduleText = formatScheduleRange(event.schedule?.[`block${block}`]);
 
   if (status === 'NOT_STARTED') {
     return (
       <div>
         <PageHeader eyebrow={`Block ${block}`} title={`Block ${block}`} />
+        {scheduleText && <div className="mb-3 text-xs font-semibold text-canaletto-lavender">{scheduleText}</div>}
         <Panel>
           <div className="text-canaletto-lavender">
             Block {block} has not started yet. Register players and start it from the Players page.
@@ -293,6 +300,7 @@ export const BlockPage = ({ event, run, block }) => {
         subtitle={`${tournament.config.max_games} FIXED RACKS`}
         right={<StatusBadge status={status} />}
       />
+      {scheduleText && <div className="mb-3 -mt-2 text-xs font-semibold text-canaletto-lavender">{scheduleText}</div>}
 
       <div className="mb-3 flex flex-wrap gap-2 border-b border-canaletto-border pb-2">
         {roundTabs.map((r) => (

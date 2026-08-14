@@ -5,7 +5,7 @@ import {
   advanceBlockRound,
   applyBlockManualPairings,
   canResetBlockTournament,
-  canResetTop16,
+  canResetKoStage,
   canUnlockBlock,
   createCanalettoEvent,
   addPlayerToBlock,
@@ -18,7 +18,7 @@ import {
   recordBlockMatchResult,
   resetBlockCurrentRound,
   resetBlockTournament,
-  resetTop16,
+  resetKoStage,
   startBlock,
   startTop16,
   undoBlockPlayerMissing,
@@ -466,18 +466,20 @@ test('unlockBlock is refused once Top16 has started', () => {
   const eligibility = canUnlockBlock(event, 'A');
   assert.equal(eligibility.ok, true);
   // Simulate KO having started by directly checking the guard function's logic
-  // via an event with top16.started true.
-  const startedTop16Event = { ...event, top16: { started: true, startedAt: new Date().toISOString() } };
+  // via an event with a real (minimal) ko.top16 stage present.
+  const startedTop16Event = { ...event, ko: { ...event.ko, top16: { startedAt: new Date().toISOString(), matches: [], tablesConfirmed: false } } };
   assert.equal(canUnlockBlock(startedTop16Event, 'A').ok, false);
   assert.throws(() => unlockBlock(startedTop16Event, 'A'), /already started/);
 });
 
 // ---------------------------------------------------------------------------
-// Reset Top 16 (bug fix: starting Top16 previously had no way back — both
-// unlockBlock() and resetBlockTournament() correctly refuse to touch a
-// source block while top16.started is true, but nothing could ever clear
-// that flag again, permanently locking the director out of both blocks'
-// Danger Zone actions once Top 16 was started).
+// Reset Current KO Stage (bug fix this generalizes: starting Top16
+// previously had no way back — both unlockBlock() and
+// resetBlockTournament() correctly refuse to touch a source block once KO
+// has started, but nothing could ever clear that again, permanently locking
+// the director out of both blocks' Danger Zone actions once Top 16 was
+// started). resetKoStage() now walks back exactly one KO stage; used here
+// with only Top16 started, it reduces to the exact old resetTop16() case.
 // ---------------------------------------------------------------------------
 
 const fullyLockedEventWithTop16Started = () => {
@@ -498,40 +500,39 @@ const fullyLockedEventWithTop16Started = () => {
   return event;
 };
 
-test('canResetTop16 is false until Top16 has started', () => {
+test('canResetKoStage is false until a KO stage has started', () => {
   const event = createCanalettoEvent();
-  assert.equal(canResetTop16(event).ok, false);
+  assert.equal(canResetKoStage(event).ok, false);
 });
 
-test('resetTop16 clears the started flag and is refused before Top16 has started', () => {
+test('resetKoStage clears Top16 and is refused again before another KO stage has started', () => {
   let event = fullyLockedEventWithTop16Started();
   assert.equal(getTop16Status(event), 'RUNNING');
 
-  event = resetTop16(event);
+  event = resetKoStage(event);
 
-  assert.equal(event.top16.started, false);
-  assert.equal(event.top16.startedAt, null);
+  assert.equal(event.ko.top16, null);
   assert.equal(getTop16Status(event), 'READY');
-  assert.throws(() => resetTop16(event), /has not started/);
+  assert.throws(() => resetKoStage(event), /No KO stage has started/);
 });
 
-test('resetTop16 does not touch either block\'s lock/qualifiers', () => {
+test('resetKoStage does not touch either block\'s lock/qualifiers', () => {
   let event = fullyLockedEventWithTop16Started();
   const blockALockBefore = event.blockALock;
   const blockBLockBefore = event.blockBLock;
 
-  event = resetTop16(event);
+  event = resetKoStage(event);
 
   assert.equal(event.blockALock, blockALockBefore);
   assert.equal(event.blockBLock, blockBLockBefore);
 });
 
-test('resetTop16 un-blocks unlockBlock()/resetBlockTournament() again — the actual bug fix', () => {
+test('resetKoStage un-blocks unlockBlock()/resetBlockTournament() again — the actual bug fix', () => {
   let event = fullyLockedEventWithTop16Started();
   assert.equal(canUnlockBlock(event, 'A').ok, false);
   assert.equal(canResetBlockTournament(event, 'A').ok, false);
 
-  event = resetTop16(event);
+  event = resetKoStage(event);
 
   assert.equal(canUnlockBlock(event, 'A').ok, true);
   assert.equal(canResetBlockTournament(event, 'A').ok, true);

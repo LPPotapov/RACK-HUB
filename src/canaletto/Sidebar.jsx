@@ -1,4 +1,5 @@
 import { getBlockStatus, getTop16Status } from '../application/canalettoEvent.js';
+import batforceLogo from '../assets/batforce_orange_logo.png';
 
 const NAV_ITEMS = [
   { id: 'event', label: 'Event', code: 'EV' },
@@ -28,9 +29,7 @@ const statusForNav = (event, id) => {
 export const Sidebar = ({ event, page, onNavigate }) => (
   <aside className="flex w-56 shrink-0 flex-col border-r border-canaletto-border bg-canaletto-panel">
     <div className="flex items-center gap-2 border-b border-canaletto-border px-4 py-4">
-      <div className="flex h-9 w-9 items-center justify-center rounded bg-canaletto-gold font-condensed text-sm font-black text-black">
-        BBS
-      </div>
+      <img src={batforceLogo} alt="Batforce" className="h-9 w-9 shrink-0 object-contain" />
       <div>
         <div className="font-condensed text-lg font-black uppercase leading-none tracking-wide text-canaletto-cream">Canaletto</div>
         <div className="text-[10px] font-bold uppercase tracking-widest text-canaletto-lavender">Tournament Director</div>
