@@ -18,7 +18,7 @@ function CanalettoApp() {
 
   return (
     <div className="flex min-h-screen min-w-[1180px] bg-canaletto-bg text-canaletto-cream">
-      <Sidebar event={event} page={page} onNavigate={setPage} />
+      <Sidebar event={event} page={page} onNavigate={setPage} cloudAuth={cloudAuth} />
       <main className="flex-1 px-8 py-6">
         {error && (
           <div className="mb-4 flex items-center justify-between rounded border border-canaletto-magenta/60 bg-canaletto-magenta/10 px-4 py-2 text-sm font-semibold text-canaletto-magenta">

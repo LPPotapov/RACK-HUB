@@ -27,7 +27,7 @@ const statusForNav = (event, id) => {
   return null;
 };
 
-export const Sidebar = ({ event, page, onNavigate }) => (
+export const Sidebar = ({ event, page, onNavigate, cloudAuth }) => (
   <aside className="flex w-56 shrink-0 flex-col border-r border-canaletto-border bg-canaletto-panel">
     <div className="flex items-center gap-2 border-b border-canaletto-border px-4 py-4">
       <img src={batforceLogo} alt="Batforce" className="h-9 w-9 shrink-0 object-contain" />
@@ -62,13 +62,22 @@ export const Sidebar = ({ event, page, onNavigate }) => (
       })}
     </nav>
 
-    <div className="border-t border-canaletto-border px-4 py-3">
+    <div className="space-y-1.5 border-t border-canaletto-border px-4 py-3">
       <a
         href="?legacy=1"
-        className="text-[11px] font-semibold uppercase tracking-wider text-canaletto-lavender/70 hover:text-canaletto-lavender"
+        className="block text-[11px] font-semibold uppercase tracking-wider text-canaletto-lavender/70 hover:text-canaletto-lavender"
       >
         Legacy UI Fallback
       </a>
+      {cloudAuth?.user && (
+        <button
+          type="button"
+          onClick={cloudAuth.signOut}
+          className="block text-[11px] font-semibold uppercase tracking-wider text-canaletto-lavender/70 hover:text-canaletto-magenta"
+        >
+          Sign Out{cloudAuth.user.email ? ` (${cloudAuth.user.email})` : ''}
+        </button>
+      )}
     </div>
   </aside>
 );
