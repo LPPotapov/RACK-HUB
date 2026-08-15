@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { resolveScoreField } from '../src/canaletto/scoreEntry.js';
+import { parseDraftScoreField, resolveScoreField } from '../src/canaletto/scoreEntry.js';
 import { recordMatchResult } from '../src/application/tournamentCommands.js';
 import { startTournament } from '../src/application/tournamentCommands.js';
 import { createApplicationState, createConfig, createTournamentState } from '../src/domain/tournamentModel.js';
@@ -42,6 +42,31 @@ test('one score + untouched opposite field autocompletes via the existing record
   assert.equal(updated.r1, 6);
   assert.equal(updated.r2, 2); // 8 - 6, via recordMatchResult()'s own autocomplete
   assert.equal(updated.done, true);
+});
+
+// ---------------------------------------------------------------------------
+// parseDraftScoreField (livescore hotfix) — the LIVE DRAFT publishing
+// parser, deliberately stricter than resolveScoreField() above: a blank
+// field must never publish a fabricated 0 to the public page, and a
+// negative value must never publish at all (task requirement 5).
+// ---------------------------------------------------------------------------
+
+test('parseDraftScoreField: a blank/whitespace field is a temporary editing state, never resolved to 0', () => {
+  assert.equal(parseDraftScoreField(''), null);
+  assert.equal(parseDraftScoreField('   '), null);
+  assert.equal(parseDraftScoreField(undefined), null);
+});
+
+test('parseDraftScoreField: a valid non-negative integer passes through unchanged', () => {
+  assert.equal(parseDraftScoreField('0'), 0);
+  assert.equal(parseDraftScoreField('6'), 6);
+  assert.equal(parseDraftScoreField('42'), 42);
+});
+
+test('parseDraftScoreField: negative, non-integer, and non-numeric input never publish', () => {
+  assert.equal(parseDraftScoreField('-1'), null);
+  assert.equal(parseDraftScoreField('4.5'), null);
+  assert.equal(parseDraftScoreField('abc'), null);
 });
 
 test('both fields blank still rejects, per the existing recordMatchResult() rule', () => {

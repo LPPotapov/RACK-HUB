@@ -4,7 +4,7 @@
 // not a general design system.
 
 import { useEffect, useState } from 'react';
-import { resolveScoreField } from './scoreEntry.js';
+import { resolveScoreField, useDraftScorePublish } from './scoreEntry.js';
 
 export const PageHeader = ({ eyebrow, title, subtitle, right }) => (
   <div className="mb-4 flex flex-wrap items-start justify-between gap-4 border-b border-canaletto-border pb-3">
@@ -277,7 +277,19 @@ const MissingTrigger = ({ match, roundNumber, onMarkMissing }) => {
 // `tableFrozen` disables ONLY the table dropdown (score entry/etc. stay
 // governed by `disabled`) once the round's tables have been confirmed — see
 // confirmBlockRoundTables()/editBlockRoundTables() in canalettoEvent.js.
-export const MatchRow = ({ match, disabled, onTableChange, onSubmit, onMarkMissing, onUndoMissing, roundNumber, tableOptions = [], tableFrozen = false, p1Gbr, p2Gbr, p1WinPct, p2WinPct }) => {
+// `onDraftChange`/`onDraftClear` (livescore hotfix, both optional): as the
+// director edits r1/r2 before Confirm, publishes a LIVE DRAFT SCORE (see
+// canalettoLive.js's setLiveDraftScore()) so the public livescore page can
+// show it before the match is officially complete — display-only, never
+// fed into onSubmit/recordBlockMatchResult(). Gated on `editing &&
+// !match.done` (see useDraftScorePublish's own comment): a re-opened,
+// already-official match being corrected does NOT publish a draft — the
+// public page keeps showing the still-valid official result for the
+// duration of that correction, never a possibly-abandoned in-progress edit
+// (this is a deliberate, documented scope choice — see the livescore
+// hotfix report). `onDraftClear` is called once, best-effort, right after a
+// SUCCESSFUL Confirm/Save — see submit() below.
+export const MatchRow = ({ match, disabled, onTableChange, onSubmit, onMarkMissing, onUndoMissing, roundNumber, tableOptions = [], tableFrozen = false, p1Gbr, p2Gbr, p1WinPct, p2WinPct, onDraftChange, onDraftClear }) => {
   const [r1, setR1] = useState(match.done ? String(match.r1) : '');
   const [r2, setR2] = useState(match.done ? String(match.r2) : '');
   const [editing, setEditing] = useState(!match.done);
@@ -287,6 +299,8 @@ export const MatchRow = ({ match, disabled, onTableChange, onSubmit, onMarkMissi
     setR2(match.done ? String(match.r2) : '');
     setEditing(!match.done);
   }, [match.id, match.done, match.r1, match.r2]);
+
+  useDraftScorePublish(editing && !match.done && !disabled, r1, r2, onDraftChange);
 
   if (match.bye) {
     if (match.canalettoMissing) {
@@ -304,8 +318,17 @@ export const MatchRow = ({ match, disabled, onTableChange, onSubmit, onMarkMissi
     const n1 = resolveScoreField(r1);
     const n2 = resolveScoreField(r2);
     if (n1 === null || n2 === null) return; // non-integer input — do not submit
-    onSubmit(n1, n2);
-    setEditing(false);
+    const ok = onSubmit(n1, n2);
+    // Livescore hotfix: a FAILED confirmation must leave the input open and
+    // editable, with the live draft still intact, so the director can
+    // correct and retry (task requirement 9) — only a SUCCESSFUL submit
+    // closes editing and clears the draft. `onSubmit` is always
+    // `run(recordBlockMatchResult, ...)` (BlockPage.jsx), which returns
+    // `run()`'s own success boolean (see useCanalettoEvent.js).
+    if (ok !== false) {
+      setEditing(false);
+      onDraftClear?.();
+    }
   };
 
   return (
@@ -391,7 +414,14 @@ export const MatchRow = ({ match, disabled, onTableChange, onSubmit, onMarkMissi
 // canalettoEvent.js) — before that, the table cell shows "—" even though
 // `match.tbl` already has a real value, so All Rounds never surfaces a
 // still-provisional table layout.
-export const MatchSummaryCard = ({ match, tablesConfirmed, p1Gbr, p2Gbr, p1WinPct, p2WinPct }) => {
+// `draftScore` (optional, livescore hotfix): `{ r1, r2 }` or null/undefined
+// — the caller's own lookup of getLiveDraftScore()/publicState's
+// `liveDraftScores` for THIS match's pointer (this component stays
+// decoupled from the live-state keying scheme itself). Only ever consulted
+// while `!match.done` — once official, the real result always wins, so a
+// draft that was never cleared can never mask a completed result (task
+// requirement 8/9).
+export const MatchSummaryCard = ({ match, tablesConfirmed, p1Gbr, p2Gbr, p1WinPct, p2WinPct, draftScore }) => {
   if (match.bye) {
     if (match.canalettoMissing) {
       const { originalMatch, playerId } = match.canalettoMissing;
@@ -430,7 +460,7 @@ export const MatchSummaryCard = ({ match, tablesConfirmed, p1Gbr, p2Gbr, p1WinPc
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
         <PlayerBlock name={match.p1.name} gbr={p1Gbr} winPct={p1WinPct} align="left" />
         <div className="text-center font-condensed text-xl font-black text-canaletto-gold">
-          {match.done ? `${match.r1} : ${match.r2}` : 'vs'}
+          {match.done ? `${match.r1} : ${match.r2}` : draftScore ? `${draftScore.r1} : ${draftScore.r2}` : 'vs'}
         </div>
         <PlayerBlock name={match.p2.name} gbr={p2Gbr} winPct={p2WinPct} align="right" />
       </div>

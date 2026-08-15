@@ -9,7 +9,9 @@
 import { Fragment, useEffect, useState } from 'react';
 import { expectedScore } from '../domain/fixedRackBbs.js';
 import { KO_RACE_TO, KO_TOP16_SLOT_SIZE, isValidKoScore } from '../application/canalettoKo.js';
+import { tvMatchKey as matchPointerKey } from '../application/canalettoLive.js';
 import { parseKoScoreField } from './koScoreEntry.js';
+import { useDraftScorePublish } from './scoreEntry.js';
 import { formatScheduleRange } from './schedule.js';
 import { ActionButton, PlayerBlock, formatDelta } from './ui.jsx';
 
@@ -18,9 +20,17 @@ import { ActionButton, PlayerBlock, formatDelta } from './ui.jsx';
 // entry, and Complete/Correct. Never auto-completes a blank side, and the
 // submit button stays disabled until the entered pair is a legal race-to-
 // `target` result (isValidKoScore — see canalettoKo.js).
+// `onDraftChange`/`onDraftClear` (livescore hotfix, both optional): same
+// contract as ui.jsx's MatchRow — publishes a LIVE DRAFT SCORE as the
+// director edits r1/r2, before Confirm/Complete Match, gated on `editing &&
+// !match.done` (a correction re-edit of an already-official match does not
+// publish a draft — see ui.jsx's MatchRow comment for the full rationale,
+// shared verbatim here). `onDraftClear` fires once, best-effort, right
+// after a SUCCESSFUL Complete/Save.
 export const KoMatchCard = ({
   match, target, disabled, onTableChange, onSubmit,
-  tableOptions = [], tableFrozen = false, p1Gbr, p2Gbr, p1WinPct, p2WinPct
+  tableOptions = [], tableFrozen = false, p1Gbr, p2Gbr, p1WinPct, p2WinPct,
+  onDraftChange, onDraftClear
 }) => {
   const [r1, setR1] = useState(match.done ? String(match.r1) : '');
   const [r2, setR2] = useState(match.done ? String(match.r2) : '');
@@ -32,14 +42,24 @@ export const KoMatchCard = ({
     setEditing(!match.done);
   }, [match.matchNumber, match.done, match.r1, match.r2]);
 
+  useDraftScorePublish(editing && !match.done && !disabled, r1, r2, onDraftChange);
+
   const n1 = parseKoScoreField(r1);
   const n2 = parseKoScoreField(r2);
   const canSubmit = n1 !== null && n2 !== null && isValidKoScore(n1, n2, target);
 
   const submit = () => {
     if (!canSubmit) return;
-    onSubmit(n1, n2);
-    setEditing(false);
+    const ok = onSubmit(n1, n2);
+    // Livescore hotfix (same rule as MatchRow): only a SUCCESSFUL Complete/
+    // Save closes editing and clears the draft; a failed one (rare here,
+    // since `canSubmit` already gates on isValidKoScore, but recordKoResult
+    // can still throw e.g. once the stage is locked) leaves the draft
+    // intact for the director to retry.
+    if (ok !== false) {
+      setEditing(false);
+      onDraftClear?.();
+    }
   };
 
   return (
@@ -153,11 +173,25 @@ const BracketPlayerRow = ({ slot, expectedPct, score, isWinner, done, showSeed }
 // height (card padding `p-2`, no oversized banners/margins — reusing
 // Block's own spacing scale rather than a new one). Winner gold, loser
 // dimmed/struck once done.
-const BracketNode = ({ match, target, tablesConfirmed, gbrConfig, showSeed }) => {
+//
+// `stage`/`liveDraftScores` (livescore hotfix, both optional): while
+// `!match.done`, prefers the director's in-progress LIVE DRAFT score (see
+// canalettoLive.js's setLiveDraftScore()/getLiveDraftScore()) over the
+// static "–" placeholder — this is what makes an unfinished Top16/QF/SF/
+// Final match show "3 : 2" live on the public bracket/OBS overlay before
+// Confirm, exactly like the operational card the director is typing into.
+// Never consulted once `match.done` — the real result always wins, so a
+// draft that outlives its match (never cleared) can never override it.
+const BracketNode = ({ match, target, tablesConfirmed, gbrConfig, showSeed, stage, liveDraftScores }) => {
   const p1Winner = match.done && match.winnerPlayerId === match.p1.playerId;
   const p2Winner = match.done && match.winnerPlayerId === match.p2.playerId;
   const p1ExpectedPct = expectedScore(match.p1.gbr, match.p2.gbr, gbrConfig.d) * 100;
   const p2ExpectedPct = expectedScore(match.p2.gbr, match.p1.gbr, gbrConfig.d) * 100;
+  const draft = !match.done && stage && liveDraftScores
+    ? liveDraftScores[matchPointerKey({ source: 'ko', stage, matchNumber: match.matchNumber })]
+    : null;
+  const p1Score = match.done ? match.r1 : draft ? draft.r1 : '–';
+  const p2Score = match.done ? match.r2 : draft ? draft.r2 : '–';
   return (
     <div className="rounded border border-canaletto-border bg-canaletto-panel p-1.5">
       <div className="mb-0.5 truncate text-[10px] font-bold uppercase leading-tight tracking-wide text-canaletto-lavender">
@@ -167,8 +201,8 @@ const BracketNode = ({ match, target, tablesConfirmed, gbrConfig, showSeed }) =>
         {tablesConfirmed && <span className="ml-1 text-canaletto-gold" title="Tables confirmed">✓</span>}
       </div>
       <div className="space-y-0">
-        <BracketPlayerRow slot={match.p1} expectedPct={p1ExpectedPct} score={match.done ? match.r1 : '–'} isWinner={p1Winner} done={match.done} showSeed={showSeed} />
-        <BracketPlayerRow slot={match.p2} expectedPct={p2ExpectedPct} score={match.done ? match.r2 : '–'} isWinner={p2Winner} done={match.done} showSeed={showSeed} />
+        <BracketPlayerRow slot={match.p1} expectedPct={p1ExpectedPct} score={p1Score} isWinner={p1Winner} done={match.done} showSeed={showSeed} />
+        <BracketPlayerRow slot={match.p2} expectedPct={p2ExpectedPct} score={p2Score} isWinner={p2Winner} done={match.done} showSeed={showSeed} />
       </div>
     </div>
   );
@@ -176,10 +210,18 @@ const BracketNode = ({ match, target, tablesConfirmed, gbrConfig, showSeed }) =>
 
 // One participant row inside a PROJECTED (not-yet-generated) bracket slot —
 // either a known player name/seed (once the feeding match is done) or a
-// muted source label ("WINNER M3" / "Awaiting Block A") — never a generic
+// muted source label ("WINNER M3" / "AWAITING BLOCK A") — never a generic
 // "TBD" (docs task item "SOURCE LABELS"/"no large TBD cards"). `showSeed`
 // (Top16 only, see BracketOverview) — QF/SF/Final read as normal knockout
 // progression, not ongoing Block A/B seeding.
+//
+// Display hotfix: an unresolved Top16 row (showSeed && !known) ALSO shows
+// its seed reference ("A1 · AWAITING BLOCK A"), sourced directly from
+// `participant.seed` — which buildBracketProjection() (canalettoKo.js)
+// derives from the CURRENT authoritative top16SeedOrder, never a separate
+// hardcoded label — so a director-edited seed order is reflected here
+// immediately. QF/SF/Final "WINNER Mx" labels never carry `seed` (showSeed
+// is false there), so they render unchanged.
 const BracketProjectedRow = ({ participant, showSeed }) => (
   <div className="truncate text-sm leading-tight">
     {participant.known ? (
@@ -188,7 +230,9 @@ const BracketProjectedRow = ({ participant, showSeed }) => (
         <span className="font-semibold text-canaletto-cream">{participant.name}</span>
       </>
     ) : (
-      <span className="text-[11px] font-semibold italic text-canaletto-lavender/50">{participant.sourceLabel}</span>
+      <span className="text-[11px] font-semibold italic text-canaletto-lavender/50">
+        {showSeed && participant.seed ? `${participant.seed} · ${participant.sourceLabel}` : participant.sourceLabel}
+      </span>
     )}
   </div>
 );
@@ -218,11 +262,11 @@ const BracketProjectedNode = ({ slot, target, showSeed }) => (
 // defaults to false — only Top16's two calls (see BracketOverview) pass
 // true; A/B seed labels are source-seeding information specific to Top16
 // and would misleadingly read as ongoing Block seeding in QF/SF/Final.
-const BracketNodeList = ({ slots, target, tablesConfirmed, gbrConfig, showSeed = false }) => (
+const BracketNodeList = ({ slots, target, tablesConfirmed, gbrConfig, showSeed = false, stage, liveDraftScores }) => (
   <div className="flex flex-1 flex-col justify-around gap-1">
     {slots.map((slot) => (
       slot.real
-        ? <BracketNode key={slot.matchNumber} match={slot.match} target={target} tablesConfirmed={tablesConfirmed} gbrConfig={gbrConfig} showSeed={showSeed} />
+        ? <BracketNode key={slot.matchNumber} match={slot.match} target={target} tablesConfirmed={tablesConfirmed} gbrConfig={gbrConfig} showSeed={showSeed} stage={stage} liveDraftScores={liveDraftScores} />
         : <BracketProjectedNode key={slot.matchNumber} slot={slot} target={target} showSeed={showSeed} />
     ))}
   </div>
@@ -252,7 +296,15 @@ const BracketColumnHeading = ({ title }) => (
 // drives the same expectedScore() calculation koFrozenMatchDisplay() already
 // uses for the operational cards — no second formula, and never invented
 // for a projected (ungenerated) slot.
-export const BracketOverview = ({ projection, ko, schedule, gbrConfig }) => {
+// `liveDraftScores` (optional, livescore hotfix — task requirement 5: "apply
+// consistently to director Top16 bracket, public/live Top16 bracket, OBS
+// bracket overlay"): passed straight through to every stage's
+// BracketNodeList — since BracketOverview is the ONE shared implementation
+// all three consumers already render (director's Top16Page.jsx,
+// LivescorePage.jsx, BracketOverlayPage.jsx), wiring it once here is what
+// makes an in-progress score consistent across all three, with no separate
+// per-consumer logic.
+export const BracketOverview = ({ projection, ko, schedule, gbrConfig, liveDraftScores }) => {
   const top16Slot1 = projection.top16.slice(0, KO_TOP16_SLOT_SIZE);
   const top16Slot2 = projection.top16.slice(KO_TOP16_SLOT_SIZE);
 
@@ -263,31 +315,31 @@ export const BracketOverview = ({ projection, ko, schedule, gbrConfig }) => {
         <div className="mb-1">
           <div className="mb-0.5 text-center text-[10px] font-bold uppercase leading-tight tracking-widest text-canaletto-magenta">Slot 1</div>
           <ScheduleLine entry={schedule?.top16Slot1} />
-          <BracketNodeList slots={top16Slot1} target={KO_RACE_TO.top16} tablesConfirmed={ko.top16?.tablesConfirmed} gbrConfig={gbrConfig} showSeed />
+          <BracketNodeList slots={top16Slot1} target={KO_RACE_TO.top16} tablesConfirmed={ko.top16?.tablesConfirmed} gbrConfig={gbrConfig} showSeed stage="top16" liveDraftScores={liveDraftScores} />
         </div>
         <div>
           <div className="mb-0.5 text-center text-[10px] font-bold uppercase leading-tight tracking-widest text-canaletto-magenta">Slot 2</div>
           <ScheduleLine entry={schedule?.top16Slot2} />
-          <BracketNodeList slots={top16Slot2} target={KO_RACE_TO.top16} tablesConfirmed={ko.top16?.tablesConfirmed} gbrConfig={gbrConfig} showSeed />
+          <BracketNodeList slots={top16Slot2} target={KO_RACE_TO.top16} tablesConfirmed={ko.top16?.tablesConfirmed} gbrConfig={gbrConfig} showSeed stage="top16" liveDraftScores={liveDraftScores} />
         </div>
       </div>
 
       <div className="flex flex-1 flex-col">
         <BracketColumnHeading title="Quarterfinals" />
         <ScheduleLine entry={schedule?.quarterfinals} />
-        <BracketNodeList slots={projection.quarterfinals} target={KO_RACE_TO.quarterfinals} tablesConfirmed={ko.quarterfinals?.tablesConfirmed} gbrConfig={gbrConfig} />
+        <BracketNodeList slots={projection.quarterfinals} target={KO_RACE_TO.quarterfinals} tablesConfirmed={ko.quarterfinals?.tablesConfirmed} gbrConfig={gbrConfig} stage="quarterfinals" liveDraftScores={liveDraftScores} />
       </div>
 
       <div className="flex flex-1 flex-col">
         <BracketColumnHeading title="Semifinals" />
         <ScheduleLine entry={schedule?.semifinals} />
-        <BracketNodeList slots={projection.semifinals} target={KO_RACE_TO.semifinals} tablesConfirmed={ko.semifinals?.tablesConfirmed} gbrConfig={gbrConfig} />
+        <BracketNodeList slots={projection.semifinals} target={KO_RACE_TO.semifinals} tablesConfirmed={ko.semifinals?.tablesConfirmed} gbrConfig={gbrConfig} stage="semifinals" liveDraftScores={liveDraftScores} />
       </div>
 
       <div className="flex flex-1 flex-col">
         <BracketColumnHeading title="Final" />
         <ScheduleLine entry={schedule?.final} />
-        <BracketNodeList slots={projection.final} target={KO_RACE_TO.final} tablesConfirmed={ko.final?.tablesConfirmed} gbrConfig={gbrConfig} />
+        <BracketNodeList slots={projection.final} target={KO_RACE_TO.final} tablesConfirmed={ko.final?.tablesConfirmed} gbrConfig={gbrConfig} stage="final" liveDraftScores={liveDraftScores} />
       </div>
     </div>
   );

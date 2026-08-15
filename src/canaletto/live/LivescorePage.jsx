@@ -25,6 +25,7 @@ import {
   getTop16Status,
   isRoundTablesConfirmed
 } from '../../application/canalettoEvent.js';
+import { getLiveDraftScore } from '../../application/canalettoLive.js';
 import { frozenMatchDisplay } from '../matchDisplay.js';
 import { BracketOverview } from '../koUi.jsx';
 import { MatchSummaryCard, PageHeader, Panel, SectionHeader, StatusBadge } from '../ui.jsx';
@@ -149,6 +150,7 @@ const AllRoundsSection = ({ event, block }) => {
                 key={m.id}
                 match={m}
                 tablesConfirmed={isRoundTablesConfirmed(event, block, r)}
+                draftScore={!m.bye && !m.done ? getLiveDraftScore(event, { source: 'block', block, roundNumber: r, matchId: m.id }) : null}
                 {...(!m.bye ? frozenMatchDisplay(m, tournament.config) : {})}
               />
             ))}
@@ -227,7 +229,7 @@ const Top16Section = ({ event }) => {
   return (
     <div>
       <PageHeader eyebrow="Knockout" title="Top 16" right={<StatusBadge status={status} />} />
-      <BracketOverview projection={projection} ko={event.ko} schedule={event.schedule} gbrConfig={gbrConfig} />
+      <BracketOverview projection={projection} ko={event.ko} schedule={event.schedule} gbrConfig={gbrConfig} liveDraftScores={event.liveDraftScores} />
     </div>
   );
 };

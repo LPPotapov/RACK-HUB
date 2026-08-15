@@ -17,6 +17,7 @@ import {
   startKoStage
 } from '../../application/canalettoEvent.js';
 import { KO_RACE_TO, KO_STAGE_LABEL, KO_STAGE_ORDER, KO_TOP16_SLOT_SIZE, isKoStageComplete, summarizeKoPlayersFromRows } from '../../application/canalettoKo.js';
+import { clearLiveDraftScore, setLiveDraftScore } from '../../application/canalettoLive.js';
 import { koFrozenMatchDisplay } from '../koMatchDisplay.js';
 import { formatScheduleRange } from '../schedule.js';
 import { BracketOverview, ChampionBanner, ChampionKoSummary, KoCalibrationControl, KoMatchCard, KoPlayerSummaryTable, KoResultsTable } from '../koUi.jsx';
@@ -48,7 +49,7 @@ const RESET_PHRASE = {
 // slot below — table assignment + race-to score entry (docs task item 26,
 // item 19: keep frozen GBR/win%/score controls/table dropdown/Confirm-Edit
 // intact).
-const MatchGrid = ({ matches, target, correctable, tableOptions, tablesConfirmed, gbrConfig, run, stage }) => (
+const MatchGrid = ({ matches, target, correctable, tableOptions, tablesConfirmed, gbrConfig, run, stage, liveRun }) => (
   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
     {matches.map((m) => (
       <KoMatchCard
@@ -60,6 +61,8 @@ const MatchGrid = ({ matches, target, correctable, tableOptions, tablesConfirmed
         tableFrozen={tablesConfirmed}
         onTableChange={(table) => run(assignKoTable, stage, { matchNumber: m.matchNumber, table })}
         onSubmit={(r1, r2) => run(recordKoResult, stage, { matchNumber: m.matchNumber, r1, r2 })}
+        onDraftChange={liveRun ? (r1, r2) => liveRun(setLiveDraftScore, { source: 'ko', stage, matchNumber: m.matchNumber }, { r1, r2 }) : undefined}
+        onDraftClear={liveRun ? () => liveRun(clearLiveDraftScore, { source: 'ko', stage, matchNumber: m.matchNumber }) : undefined}
         {...koFrozenMatchDisplay(m, gbrConfig)}
       />
     ))}
@@ -79,7 +82,7 @@ const MatchGrid = ({ matches, target, correctable, tableOptions, tablesConfirmed
 // round. QF never starts until ALL 8 matches (both slots) are done —
 // unaffected by this display grouping, since isKoStageComplete() already
 // checks every match in the stage.
-const StageOperationPanel = ({ event, run, stage, gbrConfig }) => {
+const StageOperationPanel = ({ event, run, stage, gbrConfig, liveRun }) => {
   const stageState = event.ko[stage];
   const target = KO_RACE_TO[stage];
   const tableOptions = event.tables.map((t) => t.label);
@@ -143,6 +146,7 @@ const StageOperationPanel = ({ event, run, stage, gbrConfig }) => {
               gbrConfig={gbrConfig}
               run={run}
               stage={stage}
+              liveRun={liveRun}
             />
           </div>
           <div>
@@ -161,6 +165,7 @@ const StageOperationPanel = ({ event, run, stage, gbrConfig }) => {
               gbrConfig={gbrConfig}
               run={run}
               stage={stage}
+              liveRun={liveRun}
             />
           </div>
         </>
@@ -198,7 +203,7 @@ const StageOperationPanel = ({ event, run, stage, gbrConfig }) => {
   );
 };
 
-export const Top16Page = ({ event, run }) => {
+export const Top16Page = ({ event, run, liveState, liveRun }) => {
   const status = getTop16Status(event);
   const currentStage = getCurrentKoStage(event);
   const champion = getKoChampion(event);
@@ -304,8 +309,8 @@ export const Top16Page = ({ event, run }) => {
 
       {(!currentStage || subView === 'bracket') && (
         <>
-          <BracketOverview projection={projection} ko={event.ko} schedule={event.schedule} gbrConfig={gbrConfig} />
-          {currentStage && <StageOperationPanel event={event} run={run} stage={currentStage} gbrConfig={gbrConfig} />}
+          <BracketOverview projection={projection} ko={event.ko} schedule={event.schedule} gbrConfig={gbrConfig} liveDraftScores={liveState?.liveDraftScores} />
+          {currentStage && <StageOperationPanel event={event} run={run} stage={currentStage} gbrConfig={gbrConfig} liveRun={liveRun} />}
         </>
       )}
 

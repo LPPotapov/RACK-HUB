@@ -67,12 +67,27 @@ import { useFirebaseAuth } from '../firebase/useFirebaseAuth.js';
 
 const MIRROR_DEBOUNCE_MS = 800;
 
-export const useCanalettoCloudMirror = (event, run) => {
+// Livescore hotfix — deliberately much shorter than MIRROR_DEBOUNCE_MS
+// above: a director's in-progress score-entry keystroke/arrow-click must
+// "feel like livescoring" (task requirement: "very small debounce", never
+// multi-second), which the 800ms official-result mirror cadence is too
+// slow for. This does not change how fast/slow OFFICIAL results publish —
+// see the dedicated effect below, which only fires on `liveState` changes.
+const LIVE_DRAFT_MIRROR_DEBOUNCE_MS = 200;
+
+// `liveState` (optional, livescore hotfix): the director's local
+// CanalettoLiveState (see useCanalettoLiveState.js) — passed through to
+// derivePublicState() so its `liveDraftScores` (ONLY that one field — see
+// canalettoPublicState.js) rides along on every publicState write. Omitting
+// it (or passing `undefined`/`null`) behaves exactly as before this hotfix.
+export const useCanalettoCloudMirror = (event, run, liveState) => {
   const auth = useFirebaseAuth();
   const eventRef = useRef(event);
   eventRef.current = event;
   const runRef = useRef(run);
   runRef.current = run;
+  const liveStateRef = useRef(liveState);
+  liveStateRef.current = liveState;
   const lastRemoteJsonRef = useRef(null);
 
   const [remoteStatus, setRemoteStatus] = useState('loading');
@@ -150,7 +165,7 @@ export const useCanalettoCloudMirror = (event, run) => {
           return;
         }
         writePrivateState(event);
-        writePublicState(derivePublicState(event, null));
+        writePublicState(derivePublicState(event, liveStateRef.current));
         setCloudErrors([]);
       } catch (e) {
         console.warn('Canaletto cloud sync: outbound publish failed', e);
@@ -159,6 +174,27 @@ export const useCanalettoCloudMirror = (event, run) => {
     }, MIRROR_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [event, auth.isDirector, syncMode]);
+
+  // Livescore hotfix — fast-path publicState refresh for LIVE DRAFT score
+  // changes only, deliberately decoupled from the slower 800ms
+  // event-triggered mirror above so an in-progress, unconfirmed score-entry
+  // keystroke reaches the public page quickly. Never writes privateState
+  // (liveDraftScores is display-only and is never part of the authoritative
+  // CanalettoEvent — see canalettoLive.js). Reads `eventRef.current` (always
+  // the latest event, updated synchronously by `run()` before this effect
+  // can even schedule) so a Confirm that happens in the same tick as a
+  // draft-clear is reflected together, never as two conflicting writes.
+  useEffect(() => {
+    if (!auth.isDirector || syncMode !== 'active' || !liveState) return undefined;
+    const timer = setTimeout(() => {
+      try {
+        writePublicState(derivePublicState(eventRef.current, liveState));
+      } catch (e) {
+        console.warn('Canaletto cloud sync: live draft publish failed', e);
+      }
+    }, LIVE_DRAFT_MIRROR_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [liveState, auth.isDirector, syncMode]);
 
   // The ONE explicit, director-initiated write path (event-blocking cloud
   // sync fix item 5/7 — "publishFullLocalEventToCloud" / "PUBLISH CURRENT
@@ -180,7 +216,7 @@ export const useCanalettoCloudMirror = (event, run) => {
         return { ok: false, errors: result.errors };
       }
       writePrivateState(currentEvent);
-      writePublicState(derivePublicState(currentEvent, null));
+      writePublicState(derivePublicState(currentEvent, liveStateRef.current));
       lastRemoteJsonRef.current = JSON.stringify(currentEvent);
       setRemoteStatus('valid');
       setSyncMode('active');

@@ -32,7 +32,8 @@
 //     top16SeedOrder (director-editable Top16 bracket seed placement — see
 //     getTop16Seeding()/getBracketProjection() in canalettoEvent.js; this is
 //     what makes the public/OBS bracket resolve the SAME placement as the
-//     director app, with no separate public bracket-mapping logic).
+//     director app, with no separate public bracket-mapping logic),
+//     liveDraftScores (from `liveState` — see the dedicated note below).
 //   - tables, reduced to {order, label} only.
 //
 // EXCLUDED (director-only operational state — never copied here):
@@ -46,16 +47,22 @@
 //     transient React/UI state or lives in this event's OWN cloud-sync
 //     layer, never inside the tournament data itself).
 //
-// `liveState` is accepted to match the requested `derivePublicState(event,
-// liveState)` signature, but nothing from it is copied into the output in
-// this pass: the "live draft scores" the public livescore page needs are
-// already the OFFICIAL r1/r2 values inside `rounds`/`ko` above, which now
-// reach the public page in real time via the Realtime Database listener
-// instead of requiring a same-browser-tab `storage` event. The manual
-// broadcast/stream score (liveState.tvScores) stays exclusively on the
-// separate `live` RTDB node — it must never appear in a publicly-readable
-// tournament-data payload, matching the existing principle that the
-// stream score is independent of official results.
+// `liveState` (livescore hotfix — director score-input changes publish
+// live, before Confirm): exactly ONE field of it is now copied into the
+// output — `liveDraftScores` (the director's in-progress, unconfirmed
+// score-entry values, see canalettoLive.js's setLiveDraftScore()). This is
+// what lets the public livescore page/OBS bracket overlay show a match's
+// score updating live as the director types, without waiting for
+// Confirm/Complete Match. It is display-only: no official
+// command/derivation ever reads it, and the public components that consume
+// it (MatchSummaryCard, koUi.jsx's BracketNode) only ever prefer it while
+// the underlying match is `!done` — see their own comments.
+//
+// `liveState.tvMatch`/`tvScores` (the SEPARATE, streaming-staff-controlled
+// manual TV ticker score) are deliberately NEVER copied here — they stay
+// exclusively on the separate `live` RTDB node, matching the existing
+// principle that the stream score is independent of official results (see
+// canalettoLive.js's own header for why these two concepts must not merge).
 export const CANALETTO_PUBLIC_STATE_VERSION = 1;
 
 const publicTournament = (tournament) => ({
@@ -130,5 +137,6 @@ export const derivePublicState = (event, liveState) => toJsonSafe({
   blockBTableConfirmations: event.blockBTableConfirmations,
   ko: event.ko,
   koGbrWeight: event.koGbrWeight,
-  top16SeedOrder: event.top16SeedOrder
+  top16SeedOrder: event.top16SeedOrder,
+  liveDraftScores: (liveState && liveState.liveDraftScores) || {}
 });

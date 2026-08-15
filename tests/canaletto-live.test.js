@@ -13,14 +13,17 @@ import {
   startTop16
 } from '../src/application/canalettoEvent.js';
 import {
+  clearLiveDraftScore,
   clearTvMatch,
   createCanalettoLiveState,
   getCurrentTvScore,
+  getLiveDraftScore,
   getTvSelectableMatches,
   isSelectedTvRow,
   PREFERRED_TV_TABLE_LABEL,
   resolveTvMatch,
   selectTvMatch,
+  setLiveDraftScore,
   setTvScore,
   tvMatchKey,
   validateCanalettoLiveState
@@ -211,6 +214,97 @@ test('per-match stream scores survive switching away and back: select A, score A
 });
 
 // ---------------------------------------------------------------------------
+// LIVE DRAFT SCORE (livescore hotfix) — setLiveDraftScore/clearLiveDraftScore/
+// getLiveDraftScore. Structurally separate from tvScores (per-match
+// broadcast score) — different field, same tvMatchKey() identity scheme.
+// ---------------------------------------------------------------------------
+
+test('createCanalettoLiveState includes an empty liveDraftScores map', () => {
+  const state = createCanalettoLiveState();
+  assert.deepEqual(state.liveDraftScores, {});
+  assert.equal(getLiveDraftScore(state, { source: 'ko', stage: 'top16', matchNumber: 1 }), null);
+});
+
+test('setLiveDraftScore stores a draft keyed by the SAME identity scheme as tvScores, without touching tvMatch/tvScores', () => {
+  let state = createCanalettoLiveState();
+  state = setLiveDraftScore(state, { source: 'ko', stage: 'top16', matchNumber: 3 }, { r1: 2, r2: 1 });
+  assert.deepEqual(state.liveDraftScores['ko:top16:3'], { r1: 2, r2: 1, updatedAt: state.liveDraftScores['ko:top16:3'].updatedAt });
+  assert.equal(typeof state.liveDraftScores['ko:top16:3'].updatedAt, 'string');
+  // Structurally separate from the TV/broadcast concept.
+  assert.equal(state.tvMatch, null);
+  assert.deepEqual(state.tvScores, {});
+  assert.equal(getLiveDraftScore(state, { source: 'ko', stage: 'top16', matchNumber: 3 }).r1, 2);
+});
+
+test('setLiveDraftScore supports a Block match pointer too', () => {
+  let state = createCanalettoLiveState();
+  state = setLiveDraftScore(state, { source: 'block', block: 'A', roundNumber: 2, matchId: 7 }, { r1: 4, r2: 3 });
+  assert.deepEqual(getLiveDraftScore(state, { source: 'block', block: 'A', roundNumber: 2, matchId: 7 }), {
+    r1: 4, r2: 3, updatedAt: state.liveDraftScores['block:A:2:7'].updatedAt
+  });
+});
+
+test('setLiveDraftScore does not disturb a different match\'s already-stored draft', () => {
+  let state = createCanalettoLiveState();
+  state = setLiveDraftScore(state, { source: 'ko', stage: 'top16', matchNumber: 1 }, { r1: 5, r2: 2 });
+  state = setLiveDraftScore(state, { source: 'ko', stage: 'top16', matchNumber: 2 }, { r1: 1, r2: 0 });
+  assert.equal(getLiveDraftScore(state, { source: 'ko', stage: 'top16', matchNumber: 1 }).r1, 5);
+  assert.equal(getLiveDraftScore(state, { source: 'ko', stage: 'top16', matchNumber: 2 }).r1, 1);
+});
+
+test('setLiveDraftScore rejects negative or non-integer scores', () => {
+  const state = createCanalettoLiveState();
+  const pointer = { source: 'ko', stage: 'top16', matchNumber: 1 };
+  assert.throws(() => setLiveDraftScore(state, pointer, { r1: -1, r2: 0 }), /r1/);
+  assert.throws(() => setLiveDraftScore(state, pointer, { r1: 1.5, r2: 0 }), /r1/);
+  assert.throws(() => setLiveDraftScore(state, pointer, { r1: 0, r2: -1 }), /r2/);
+});
+
+test('setLiveDraftScore rejects an invalid pointer, same validation as selectTvMatch', () => {
+  const state = createCanalettoLiveState();
+  assert.throws(() => setLiveDraftScore(state, { source: 'ko', stage: 'nope', matchNumber: 1 }, { r1: 0, r2: 0 }), /invalid stage/);
+});
+
+test('setLiveDraftScore does not mutate its input state', () => {
+  const state = createCanalettoLiveState();
+  const frozen = JSON.parse(JSON.stringify(state));
+  setLiveDraftScore(state, { source: 'ko', stage: 'top16', matchNumber: 1 }, { r1: 3, r2: 2 });
+  assert.deepEqual(state, frozen);
+});
+
+test('clearLiveDraftScore removes exactly one match\'s draft, leaving others untouched', () => {
+  let state = createCanalettoLiveState();
+  state = setLiveDraftScore(state, { source: 'ko', stage: 'top16', matchNumber: 1 }, { r1: 5, r2: 2 });
+  state = setLiveDraftScore(state, { source: 'ko', stage: 'top16', matchNumber: 2 }, { r1: 1, r2: 0 });
+  state = clearLiveDraftScore(state, { source: 'ko', stage: 'top16', matchNumber: 1 });
+  assert.equal(getLiveDraftScore(state, { source: 'ko', stage: 'top16', matchNumber: 1 }), null);
+  assert.equal(getLiveDraftScore(state, { source: 'ko', stage: 'top16', matchNumber: 2 }).r1, 1);
+});
+
+test('clearLiveDraftScore on a pointer with no stored draft is a harmless no-op', () => {
+  const state = createCanalettoLiveState();
+  const cleared = clearLiveDraftScore(state, { source: 'ko', stage: 'top16', matchNumber: 1 });
+  assert.deepEqual(cleared, state);
+});
+
+test('a live draft score never becomes part of the official CanalettoEvent — it lives ONLY on liveState', () => {
+  let event = eventWithTop16Started();
+  const before = JSON.parse(JSON.stringify(event));
+  const match = event.ko.top16.matches[0];
+
+  let liveState = createCanalettoLiveState();
+  liveState = setLiveDraftScore(liveState, { source: 'ko', stage: 'top16', matchNumber: match.matchNumber }, { r1: 6, r2: 6 });
+
+  // Official event is completely unaffected: no match completed, no
+  // winner declared, no GBR/MP/standings/bracket progression, nothing
+  // locked — draft-setting is structurally incapable of touching `event`.
+  assert.deepEqual(event, before);
+  assert.equal(event.ko.top16.matches[0].done, false);
+  assert.equal(event.ko.top16.matches[0].winnerPlayerId, null);
+  assert.equal(event.ko.quarterfinals, null);
+});
+
+// ---------------------------------------------------------------------------
 // validateCanalettoLiveState
 // ---------------------------------------------------------------------------
 
@@ -240,6 +334,31 @@ test('validateCanalettoLiveState accepts a valid Block pointer and multiple stor
     tvScores: { 'block:B:2:12345': { r1: 3, r2: 2 }, 'ko:top16:1': { r1: 0, r2: 0 } }
   };
   assert.equal(validateCanalettoLiveState(state).valid, true);
+});
+
+test('validateCanalettoLiveState tolerates a state predating liveDraftScores (hotfix compatibility) — absence is valid', () => {
+  const state = { tvMatch: null, tvScores: {} }; // no liveDraftScores field at all
+  assert.equal(validateCanalettoLiveState(state).valid, true);
+});
+
+test('validateCanalettoLiveState accepts a well-formed liveDraftScores map', () => {
+  const state = {
+    tvMatch: null,
+    tvScores: {},
+    liveDraftScores: { 'ko:top16:1': { r1: 3, r2: 2, updatedAt: '2026-08-16T10:00:00.000Z' } }
+  };
+  assert.equal(validateCanalettoLiveState(state).valid, true);
+});
+
+test('validateCanalettoLiveState rejects a malformed liveDraftScores entry', () => {
+  const negative = { tvMatch: null, tvScores: {}, liveDraftScores: { 'ko:top16:1': { r1: -1, r2: 0, updatedAt: 'x' } } };
+  assert.equal(validateCanalettoLiveState(negative).valid, false);
+
+  const missingTimestamp = { tvMatch: null, tvScores: {}, liveDraftScores: { 'ko:top16:1': { r1: 1, r2: 0 } } };
+  assert.equal(validateCanalettoLiveState(missingTimestamp).valid, false);
+
+  const notAnObject = { tvMatch: null, tvScores: {}, liveDraftScores: [] };
+  assert.equal(validateCanalettoLiveState(notAnObject).valid, false);
 });
 
 // ---------------------------------------------------------------------------

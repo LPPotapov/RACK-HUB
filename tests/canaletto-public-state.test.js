@@ -19,9 +19,11 @@ import {
 } from '../src/application/canalettoEvent.js';
 import {
   createCanalettoLiveState,
+  getLiveDraftScore,
   getTvSelectableMatches,
   resolveTvMatch,
   selectTvMatch,
+  setLiveDraftScore,
   setTvScore
 } from '../src/application/canalettoLive.js';
 import { restoreCanalettoEvent } from '../src/application/canalettoBackup.js';
@@ -157,6 +159,69 @@ test('derivePublicState never exposes the manual broadcast/stream score, even wh
   const json = JSON.stringify(publicState);
   assert.ok(!json.includes('tvScores'));
   assert.ok(!json.includes('tvMatch'));
+});
+
+// ---------------------------------------------------------------------------
+// LIVE DRAFT SCORE in publicState (livescore hotfix) — the ONE liveState
+// field that DOES cross into publicState, separate from tvScores/tvMatch
+// above (which never do).
+// ---------------------------------------------------------------------------
+
+test('derivePublicState copies liveDraftScores (and ONLY that field) from liveState', () => {
+  const event = richEvent();
+  const firstMatch = event.ko.top16.matches.find((m) => !m.done);
+  let liveState = selectTvMatch(createCanalettoLiveState(), { source: 'ko', stage: 'top16', matchNumber: firstMatch.matchNumber });
+  liveState = setTvScore(liveState, { r1: 9, r2: 9 }); // broadcast score — must NOT leak
+  liveState = setLiveDraftScore(liveState, { source: 'ko', stage: 'top16', matchNumber: firstMatch.matchNumber }, { r1: 3, r2: 2 });
+
+  const publicState = derivePublicState(event, liveState);
+  assert.deepEqual(publicState.liveDraftScores, liveState.liveDraftScores);
+  assert.equal(getLiveDraftScore(publicState, { source: 'ko', stage: 'top16', matchNumber: firstMatch.matchNumber }).r1, 3);
+  const json = JSON.stringify(publicState);
+  assert.ok(!json.includes('tvScores'));
+  assert.ok(!json.includes('"tvMatch"'));
+});
+
+test('derivePublicState defaults liveDraftScores to {} when liveState is null/omitted', () => {
+  const event = richEvent();
+  assert.deepEqual(derivePublicState(event, null).liveDraftScores, {});
+});
+
+test('public bracket projection prefers the live draft for an unfinished Top16 match', () => {
+  const event = richEvent();
+  const unfinished = event.ko.top16.matches.find((m) => !m.done);
+  let liveState = createCanalettoLiveState();
+  liveState = setLiveDraftScore(liveState, { source: 'ko', stage: 'top16', matchNumber: unfinished.matchNumber }, { r1: 4, r2: 3 });
+  const publicState = derivePublicState(event, liveState);
+
+  const projection = getBracketProjection(publicState);
+  const slot = projection.top16.find((s) => s.real && s.match.matchNumber === unfinished.matchNumber);
+  assert.equal(slot.match.done, false);
+  assert.equal(getLiveDraftScore(publicState, { source: 'ko', stage: 'top16', matchNumber: unfinished.matchNumber }).r1, 4);
+  // The official match itself is untouched by the draft — still not done,
+  // no winner — consumers (koUi.jsx's BracketNode) decide display
+  // preference from `!match.done`, never from a second source of truth.
+  assert.equal(slot.match.winnerPlayerId, null);
+});
+
+test('public projection always shows the OFFICIAL score for a completed match, even if a stale draft still exists', () => {
+  const event = richEvent(); // firstMatch is already recorded/done in this fixture
+  const doneMatch = event.ko.top16.matches.find((m) => m.done);
+  let liveState = createCanalettoLiveState();
+  // A stale/never-cleared draft with a DIFFERENT score than the official one.
+  liveState = setLiveDraftScore(liveState, { source: 'ko', stage: 'top16', matchNumber: doneMatch.matchNumber }, { r1: 1, r2: 1 });
+  const publicState = derivePublicState(event, liveState);
+
+  const projection = getBracketProjection(publicState);
+  const slot = projection.top16.find((s) => s.real && s.match.matchNumber === doneMatch.matchNumber);
+  assert.equal(slot.match.done, true);
+  assert.equal(slot.match.r1, doneMatch.r1);
+  assert.equal(slot.match.r2, doneMatch.r2);
+  // The stale draft is still technically present in the payload...
+  assert.ok(getLiveDraftScore(publicState, { source: 'ko', stage: 'top16', matchNumber: doneMatch.matchNumber }));
+  // ...but every real consumer (koUi.jsx's BracketNode/BracketPlayerRow)
+  // only ever reads it while `!match.done` — the official r1/r2 above is
+  // what is actually displayed once a match is done, never the draft.
 });
 
 test('derivePublicState does not mutate its input event or liveState', () => {

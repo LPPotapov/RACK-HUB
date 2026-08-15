@@ -76,7 +76,8 @@ export const PREFERRED_TV_TABLE_LABEL = '301 TV';
 export const createCanalettoLiveState = () => ({
   schemaVersion: CANALETTO_LIVE_SCHEMA_VERSION,
   tvMatch: null,
-  tvScores: {}
+  tvScores: {},
+  liveDraftScores: {}
 });
 
 // Stable string key identifying a tvMatch pointer, used to store/retrieve
@@ -157,6 +158,57 @@ export const getCurrentTvScore = (liveState) => {
   return liveState.tvScores?.[tvMatchKey(liveState.tvMatch)] || { r1: 0, r2: 0 };
 };
 
+// ---------------------------------------------------------------------------
+// LIVE DRAFT SCORE (livescore hotfix) — the tournament director's
+// IN-PROGRESS score-entry value for a not-yet-confirmed Block or KO match,
+// published to the public livescore page (and OBS bracket overlay) BEFORE
+// Confirm/Complete Match is pressed. STRUCTURALLY SEPARATE from `tvScores`
+// above (the streaming staff's manual TV ticker score — see file header,
+// "there are intentionally separate concepts"): a different field, never
+// read by resolveTvMatch()/the TV overlay, and never merged with it. No
+// official command (recordKoResult/recordBlockMatchResult/etc.) ever reads
+// `liveDraftScores` either — a draft can only ever become official through
+// those existing commands themselves, which are always called with the
+// score-entry component's own local input value, exactly as before this
+// hotfix; this module never feeds a draft value into an official command.
+//
+// Keyed with the SAME matchPointer identity scheme as tvScores (tvMatchKey()
+// above, reused as-is — one identity-keying implementation, not a second).
+export const setLiveDraftScore = (liveState, pointer, { r1, r2 }) => {
+  const error = validateTvMatchPointer(pointer);
+  if (error) throw new Error(`setLiveDraftScore: ${error}`);
+  if (!Number.isInteger(r1) || r1 < 0) {
+    throw new Error('setLiveDraftScore: r1 must be a non-negative integer');
+  }
+  if (!Number.isInteger(r2) || r2 < 0) {
+    throw new Error('setLiveDraftScore: r2 must be a non-negative integer');
+  }
+  const key = tvMatchKey(pointer);
+  return {
+    ...liveState,
+    liveDraftScores: { ...liveState.liveDraftScores, [key]: { r1, r2, updatedAt: new Date().toISOString() } }
+  };
+};
+
+// Best-effort hygiene, not a correctness requirement: display always prefers
+// the draft only while the match is officially unconfirmed (`!match.done`,
+// see koUi.jsx/ui.jsx), so a draft lingering here after its match is
+// confirmed is never actually shown — this just keeps the stored map from
+// growing unbounded over a long event. A pointer with no stored draft is a
+// no-op (returns `liveState` unchanged, not an error).
+export const clearLiveDraftScore = (liveState, pointer) => {
+  const key = tvMatchKey(pointer);
+  if (key == null || !liveState.liveDraftScores || !(key in liveState.liveDraftScores)) return liveState;
+  const next = { ...liveState.liveDraftScores };
+  delete next[key];
+  return { ...liveState, liveDraftScores: next };
+};
+
+export const getLiveDraftScore = (liveState, pointer) => {
+  const key = tvMatchKey(pointer);
+  return (key && liveState.liveDraftScores?.[key]) || null;
+};
+
 export const validateCanalettoLiveState = (state) => {
   const errors = [];
   if (typeof state !== 'object' || state === null || Array.isArray(state)) {
@@ -175,6 +227,26 @@ export const validateCanalettoLiveState = (state) => {
         errors.push(`tvScores["${key}"] must be { r1: non-negative integer, r2: non-negative integer }`);
       }
     });
+  }
+  // Optional (like tvScores would be for a state predating this field) — a
+  // liveState persisted/synced before this hotfix won't have it yet, and
+  // getLiveDraftScore()/setLiveDraftScore() already tolerate its absence, so
+  // absence must never invalidate an otherwise-valid stored/synced state.
+  if ('liveDraftScores' in state && state.liveDraftScores !== undefined) {
+    const d = state.liveDraftScores;
+    if (typeof d !== 'object' || d === null || Array.isArray(d)) {
+      errors.push('liveDraftScores must be a plain object keyed by tvMatchKey() when present');
+    } else {
+      Object.entries(d).forEach(([key, v]) => {
+        if (
+          typeof v !== 'object' || v === null ||
+          !Number.isInteger(v.r1) || !Number.isInteger(v.r2) || v.r1 < 0 || v.r2 < 0 ||
+          typeof v.updatedAt !== 'string'
+        ) {
+          errors.push(`liveDraftScores["${key}"] must be { r1, r2: non-negative integers, updatedAt: string }`);
+        }
+      });
+    }
   }
   return { valid: errors.length === 0, errors };
 };

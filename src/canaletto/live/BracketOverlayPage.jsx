@@ -16,7 +16,7 @@ export const BracketOverlayPage = () => {
   return (
     <OverlayShell maxWidth="max-w-[1600px]">
       <OverlayHeader eyebrow={event.settings.title} title="Knockout Bracket" />
-      <BracketOverview projection={projection} ko={event.ko} schedule={event.schedule} gbrConfig={gbrConfig} />
+      <BracketOverview projection={projection} ko={event.ko} schedule={event.schedule} gbrConfig={gbrConfig} liveDraftScores={event.liveDraftScores} />
     </OverlayShell>
   );
 };
