@@ -17,8 +17,7 @@ import {
   PREFERRED_TV_TABLE_LABEL,
   selectTvMatch
 } from '../../application/canalettoLive.js';
-import { buildLiveUrl, LIVE_LINKS } from '../live/liveLinks.js';
-import { useCanalettoLiveState } from '../useCanalettoLiveState.js';
+import { buildLiveUrl, LIVE_LINKS, withEventParam } from '../live/liveLinks.js';
 import { writeLiveState } from '../../firebase/canalettoCloudSync.js';
 import { useFirebaseAuth } from '../../firebase/useFirebaseAuth.js';
 import { ActionButton, PageHeader, Panel } from '../ui.jsx';
@@ -27,8 +26,10 @@ import { ActionButton, PageHeader, Panel } from '../ui.jsx';
 // and KO ({source,stage,matchNumber}) rows.
 const rowKey = (r) => (r.source === 'ko' ? `ko-${r.stage}-${r.matchNumber}` : `block-${r.block}-${r.roundNumber}-${r.matchId}`);
 
-const TvMatchSelector = ({ event }) => {
-  const { liveState, run } = useCanalettoLiveState();
+// `liveState`/`run` are now the ONE shared instance lifted to
+// CanalettoApp.jsx (livescore hotfix — see its own comment for why this
+// page can no longer instantiate its own useCanalettoLiveState() here).
+const TvMatchSelector = ({ event, liveState, run }) => {
   const rows = getTvSelectableMatches(event);
   const selected = liveState.tvMatch;
 
@@ -90,7 +91,7 @@ const TvMatchSelector = ({ event }) => {
 };
 
 const LinkRow = ({ label, query }) => {
-  const url = buildLiveUrl(window.location.origin, window.location.pathname, query);
+  const url = buildLiveUrl(window.location.origin, window.location.pathname, withEventParam(query));
   const [copied, setCopied] = useState(false);
 
   return (
@@ -119,11 +120,11 @@ const LinkRow = ({ label, query }) => {
   );
 };
 
-export const LivePage = ({ event }) => (
+export const LivePage = ({ event, liveState, run }) => (
   <div>
     <PageHeader eyebrow="Broadcast" title="Live" subtitle="Public livescore, TV overlay control, and OBS overlay links" />
 
-    <TvMatchSelector event={event} />
+    <TvMatchSelector event={event} liveState={liveState} run={run} />
 
     <Panel title="Public & Overlay Links" className="mt-4">
       <div className="mb-3 text-xs text-canaletto-lavender">

@@ -1,4 +1,5 @@
 import { getBlockStatus, getTop16Status } from '../application/canalettoEvent.js';
+import { IS_TEST_EVENT } from '../firebase/canalettoCloudPaths.js';
 import batforceLogo from '../assets/batforce_orange_logo.png';
 
 const NAV_ITEMS = [
@@ -36,6 +37,17 @@ export const Sidebar = ({ event, page, onNavigate, cloudAuth }) => (
         <div className="text-[10px] font-bold uppercase tracking-widest text-canaletto-lavender">Tournament Director</div>
       </div>
     </div>
+
+    {/* Urgent testing-feature hotfix — a very obvious, impossible-to-miss
+        marker that this session is pointed at the ISOLATED canalettoTest
+        Firebase namespace, never production. Only ever renders when the
+        URL explicitly carried `event=test` (see canalettoCloudPaths.js's
+        IS_TEST_EVENT — the ONE place this is decided). */}
+    {IS_TEST_EVENT && (
+      <div className="border-b border-canaletto-magenta bg-canaletto-magenta px-4 py-1.5 text-center font-condensed text-xs font-black uppercase tracking-widest text-white">
+        Test Event
+      </div>
+    )}
 
     <nav className="flex-1 py-3">
       {NAV_ITEMS.map((item) => {
