@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  DEFAULT_TOP16_SEED_ORDER,
   addPlayerToBlock,
   assignKoTable,
   confirmKoTables,
   createCanalettoEvent,
   getBlockStatus,
   getKoGbrWeight,
+  getTop16SeedOrder,
   getTop16Status,
   lockBlock,
   recordBlockMatchResult,
@@ -15,6 +17,7 @@ import {
   startBlock,
   startTop16,
   updateKoGbrWeight,
+  updateTop16SeedOrder,
   validateCanalettoEvent
 } from '../src/application/canalettoEvent.js';
 import { createCanalettoLiveState, getTvSelectableMatches, resolveTvMatch, selectTvMatch } from '../src/application/canalettoLive.js';
@@ -120,6 +123,35 @@ test('WITHOUT the codec, the same round trip reproduces the exact reported corru
   assert.ok(result.errors.some((e) => e.includes('rounds must be a plain object')));
 });
 
+test('a custom Top16 seed order survives the Firebase encode/decode round trip exactly', () => {
+  let event = createCanalettoEvent({ roundsPerBlock: 1, racksPerMatch: 8, qualificationThreshold: 8 });
+  event = setEventTables(event, tablesOf(4));
+  rosterOf(16).forEach((p) => { event = addPlayerToBlock(event, 'A', p); });
+  rosterOf(16, 100).forEach((p) => { event = addPlayerToBlock(event, 'B', p); });
+  event = startBlock(event, 'A');
+  event = startBlock(event, 'B');
+  ['A', 'B'].forEach((block) => {
+    event[`block${block}`].tournament.rounds[1].forEach((m) => {
+      event = recordBlockMatchResult(event, block, { roundNumber: 1, matchId: m.id, r1: 5, r2: 3 });
+    });
+  });
+  event = lockBlock(event, 'A');
+  event = lockBlock(event, 'B');
+  const customOrder = [
+    ['B1', 'A8'], ['A1', 'B8'], ['A2', 'B7'], ['B2', 'A7'],
+    ['A3', 'B6'], ['B3', 'A6'], ['A4', 'B5'], ['B4', 'A5']
+  ];
+  event = updateTop16SeedOrder(event, customOrder);
+
+  const roundTripped = cloudRoundTrip(event);
+  assert.deepEqual(roundTripped.top16SeedOrder, customOrder);
+  assert.equal(validateCanalettoEvent(roundTripped).valid, true);
+
+  const publicState = derivePublicState(event, null);
+  const publicRoundTripped = publicCloudRoundTrip(publicState);
+  assert.deepEqual(publicRoundTripped.top16SeedOrder, customOrder);
+});
+
 test('rounds keyed by round number survive the round trip with correct keys and content', () => {
   const event = richEvent();
   const roundTripped = cloudRoundTrip(event);
@@ -197,6 +229,21 @@ test('decodeEventFromCloud also repairs data ALREADY corrupted in the database t
   const result = validateCanalettoEvent(decoded);
   assert.deepEqual(result.errors, []);
   assert.equal(result.valid, true);
+});
+
+test('Top16 seed hotfix: an existing event with no top16SeedOrder field at all decodes cleanly and resolves to the new default preset (no crash, no migration required)', () => {
+  const decoded = decodeEventFromCloud({
+    schemaVersion: 1,
+    settings: { title: 'T' },
+    schedule: {},
+    koGbrWeight: 0.5,
+    blockA: { tournament: { started: false, currentRound: 0, totalRounds: 1, config: {}, tournamentConfig: {}, roster: [], players: [], rounds: [] } },
+    blockB: { tournament: { started: false, currentRound: 0, totalRounds: 1, config: {}, tournamentConfig: {}, roster: [], players: [], rounds: [] } }
+    // No top16SeedOrder field at all — pre-hotfix event.
+  });
+  assert.equal('top16SeedOrder' in decoded, false);
+  assert.equal(validateCanalettoEvent(decoded).valid, true);
+  assert.deepEqual(getTop16SeedOrder(decoded), DEFAULT_TOP16_SEED_ORDER);
 });
 
 test('koGbrWeight and other real values are unaffected by the round trip', () => {

@@ -205,7 +205,8 @@ export const createCanalettoEvent = ({ settings: settingsOverrides, ...settingsS
     blockBTableConfirmations: [],
     ko: EMPTY_KO,
     schedule: EMPTY_SCHEDULE,
-    koGbrWeight: DEFAULT_KO_GBR_WEIGHT
+    koGbrWeight: DEFAULT_KO_GBR_WEIGHT,
+    top16SeedOrder: DEFAULT_TOP16_SEED_ORDER
   };
 };
 
@@ -747,29 +748,76 @@ export const getTop16Status = (event) => {
   return 'WAITING_FOR_BOTH';
 };
 
-// Exact, single, non-configurable Canaletto KO seeding: strictly from frozen
-// block rank, never re-sorted by GBR/Swiss/cross_elo/anything else.
-//   A1 vs B8   B1 vs A8
-//   A2 vs B7   B2 vs A7
-//   A3 vs B6   B3 vs A6
-//   A4 vs B5   B4 vs A5
-const TOP16_SEED_PAIRS = [[1, 8], [2, 7], [3, 6], [4, 5]];
+// ---------------------------------------------------------------------------
+// Top16 seed ORDER — director-editable bracket seed PLACEMENT (live hotfix,
+// see AGENTS.md-adjacent hotfix notes). The 8 qualifier PAIRS themselves
+// (A_hi vs B_lo / B_hi vs A_lo for hi/lo in [[1,8],[2,7],[3,6],[4,5]]) are
+// unchanged and are NOT re-derived here — this only controls which bracket
+// match (M1-M8) each pair is placed into, and is fully director-editable
+// (see updateTop16SeedOrder() below). Qualifier ranking/selection (WHO is
+// A1..A8/B1..B8) is completely untouched and lives entirely in
+// lockBlock()/qualifier freezing, elsewhere in this module.
+//
+// AUTHORITATIVE DEFAULT PLACEMENT (tournament director correction, live
+// hotfix pass — do not sort or reinterpret):
+//   M1 A1-B8   M2 A4-B5   M3 A6-B3   M4 A7-B2
+//   M5 A2-B7   M6 A3-B6   M7 A5-B4   M8 A8-B1
+export const DEFAULT_TOP16_SEED_ORDER = [
+  ['A1', 'B8'],
+  ['A4', 'B5'],
+  ['A6', 'B3'],
+  ['A7', 'B2'],
+  ['A2', 'B7'],
+  ['A3', 'B6'],
+  ['A5', 'B4'],
+  ['A8', 'B1']
+];
 
-export const computeTop16Seeding = (event) => {
-  if (!event.blockALock || !event.blockBLock) {
-    throw new Error('computeTop16Seeding: both Block A and Block B must be locked first');
+// The 16 valid seed references — exactly A1..A8, B1..B8, once each. Exported
+// so the director editor UI (Top16SeedEditorModal) can populate its seed
+// dropdown options from the SAME source of truth, never a hand-copied list.
+export const TOP16_SEED_REFS = ['A', 'B'].flatMap((block) => Array.from({ length: 8 }, (_, i) => `${block}${i + 1}`));
+
+// `event.top16SeedOrder` is OPTIONAL — an event saved/synced before this
+// hotfix won't have it. Always resolved through this getter, never read
+// directly off `event`, so every caller (including old restored/cloud
+// events) transparently falls back to the exact new default preset above —
+// same tolerant-getter precedent as getKoGbrWeight().
+export const getTop16SeedOrder = (event) => (Array.isArray(event.top16SeedOrder) ? event.top16SeedOrder : DEFAULT_TOP16_SEED_ORDER);
+
+// Structural + semantic validation: exactly 8 matches, 16 total seed slots,
+// each of A1-A8/B1-B8 appearing exactly once — no duplicate, no missing, no
+// unknown seed. Shared by updateTop16SeedOrder() below AND the director
+// editor UI (Top16SeedEditorModal) for live validation feedback — ONE
+// validator, never reimplemented in React.
+export const validateTop16SeedOrder = (seedOrder) => {
+  if (!Array.isArray(seedOrder) || seedOrder.length !== 8) {
+    return { valid: false, errors: ['Seed order must contain exactly 8 matches (M1-M8)'] };
   }
-  const qa = event.blockALock.qualifiers;
-  const qb = event.blockBLock.qualifiers;
-  if (qa.length !== 8 || qb.length !== 8) {
-    throw new Error('computeTop16Seeding: exact Top16 seeding requires exactly 8 frozen qualifiers from each block');
-  }
-  const pairings = [];
-  TOP16_SEED_PAIRS.forEach(([hi, lo]) => {
-    pairings.push({ matchNumber: pairings.length + 1, top: qa[hi - 1], bottom: qb[lo - 1] });
-    pairings.push({ matchNumber: pairings.length + 1, top: qb[hi - 1], bottom: qa[lo - 1] });
+  const errors = [];
+  const refs = [];
+  seedOrder.forEach((pair, i) => {
+    if (!Array.isArray(pair) || pair.length !== 2) {
+      errors.push(`M${i + 1}: must have exactly two seed slots`);
+      return;
+    }
+    refs.push(...pair);
   });
-  return pairings;
+  if (errors.length > 0) return { valid: false, errors };
+  const seen = new Set();
+  refs.forEach((ref) => {
+    if (!TOP16_SEED_REFS.includes(ref)) {
+      errors.push(`Unknown seed reference "${ref}"`);
+    } else if (seen.has(ref)) {
+      errors.push(`Duplicate seed "${ref}"`);
+    } else {
+      seen.add(ref);
+    }
+  });
+  TOP16_SEED_REFS.forEach((ref) => {
+    if (!seen.has(ref)) errors.push(`Missing seed "${ref}"`);
+  });
+  return { valid: errors.length === 0, errors };
 };
 
 // Placeholder slot for a not-yet-locked qualifier seed — deliberately NOT a
@@ -783,25 +831,55 @@ const placeholderQualifier = (block, seedNumber) => ({
   gbr: null
 });
 
+const resolveSeedRef = (qa, qb, ref) => {
+  const block = ref[0];
+  const n = Number(ref.slice(1));
+  const arr = block === 'A' ? qa : qb;
+  return (arr && arr[n - 1]) || placeholderQualifier(block, n);
+};
+
+// Exact, director-editable Canaletto KO seed PLACEMENT: which frozen
+// qualifier sits in which of the 8 Top16 bracket matches, per
+// getTop16SeedOrder() above (defaults to DEFAULT_TOP16_SEED_ORDER, never
+// re-sorted by GBR/Swiss/cross_elo/anything else). Strict — throws unless
+// BOTH blocks are fully locked; used only to gate/generate startKoStage('top16')
+// and to rebuild the stage when the director confirms an edited seed after
+// blocks are already locked (see updateTop16SeedOrder()).
+export const computeTop16Seeding = (event) => {
+  if (!event.blockALock || !event.blockBLock) {
+    throw new Error('computeTop16Seeding: both Block A and Block B must be locked first');
+  }
+  const qa = event.blockALock.qualifiers;
+  const qb = event.blockBLock.qualifiers;
+  if (qa.length !== 8 || qb.length !== 8) {
+    throw new Error('computeTop16Seeding: exact Top16 seeding requires exactly 8 frozen qualifiers from each block');
+  }
+  return getTop16SeedOrder(event).map(([topRef, bottomRef], i) => ({
+    matchNumber: i + 1,
+    top: resolveSeedRef(qa, qb, topRef),
+    bottom: resolveSeedRef(qa, qb, bottomRef)
+  }));
+};
+
 // ALWAYS-VISIBLE Top16 seed preview (director correction pass): unlike
 // computeTop16Seeding() above (strict — throws unless BOTH blocks are fully
-// locked, used only to gate startTop16()), this always returns the 8 fixed
-// seed slots, filling in whichever block(s) are already locked and using a
-// placeholder for the other — so the director can see the bracket shape
-// (and Block A's seeds as soon as Friday's Block A locks) before Block B
-// even starts. The seed RELATIONSHIPS are identical and equally fixed
-// (never re-sorted by GBR) — only the data behind each slot differs.
+// locked, used only to gate startTop16()), this always returns the 8
+// director-configured seed slots (getTop16SeedOrder()), filling in
+// whichever block(s) are already locked and using a placeholder for the
+// other — so the director can see the bracket shape (and Block A's seeds as
+// soon as Block A locks) before Block B even starts, and can edit seed
+// placement even before either block is locked (the editor only ever
+// manipulates seed REFERENCES, never player identities). The seed
+// RELATIONSHIPS are whatever the director has configured (default or
+// custom) — only the data behind each slot differs.
 export const getTop16Seeding = (event) => {
   const qa = event.blockALock?.qualifiers;
   const qb = event.blockBLock?.qualifiers;
-  const seedA = (n) => (qa && qa[n - 1]) || placeholderQualifier('A', n);
-  const seedB = (n) => (qb && qb[n - 1]) || placeholderQualifier('B', n);
-  const pairings = [];
-  TOP16_SEED_PAIRS.forEach(([hi, lo]) => {
-    pairings.push({ matchNumber: pairings.length + 1, top: seedA(hi), bottom: seedB(lo) });
-    pairings.push({ matchNumber: pairings.length + 1, top: seedB(hi), bottom: seedA(lo) });
-  });
-  return pairings;
+  return getTop16SeedOrder(event).map(([topRef, bottomRef], i) => ({
+    matchNumber: i + 1,
+    top: resolveSeedRef(qa, qb, topRef),
+    bottom: resolveSeedRef(qa, qb, bottomRef)
+  }));
 };
 
 // Full 4-stage bracket PROJECTION (director correction pass — "show the
@@ -812,6 +890,62 @@ export const getTop16Seeding = (event) => {
 // purely a read. See buildBracketProjection() in canalettoKo.js for the
 // full slot-resolution rules.
 export const getBracketProjection = (event) => buildBracketProjection(event.ko, getTop16Seeding(event));
+
+// ---------------------------------------------------------------------------
+// Top16 seed EDITOR (live hotfix) — director-only manual rearrangement of
+// which frozen qualifier seed sits in which of the 8 Top16 bracket matches.
+// Edits ONLY seed references (A1-A8/B1-B8), never player identities —
+// qualification/ranking is untouched; only bracket PLACEMENT changes.
+//
+// SAFE EDITING WINDOW: allowed any time no OFFICIAL Top16 result has been
+// recorded yet, regardless of whether Top16 has technically started
+// (matches generated with tables assigned) — matching "seed editing is
+// allowed while no official Top16 result has been recorded" exactly. Once
+// any Top16 match is done, editing is locked; the director must Reset Top16
+// (resetKoStage()) before changing seed again, never a silent reshuffle of
+// players after real results exist.
+// ---------------------------------------------------------------------------
+
+export const canEditTop16Seed = (event) => {
+  const top16 = event.ko.top16;
+  if (top16 && top16.matches.some((m) => m.done)) {
+    return { ok: false, reason: 'TOP16 SEED LOCKED — RESET TOP16 BEFORE CHANGING SEED' };
+  }
+  return { ok: true, reason: null };
+};
+
+// Confirms a new (validated) seed order as authoritative event state. If
+// Top16 has already been generated (both blocks locked, startKoStage('top16')
+// already called) but no result has been recorded yet, the Top16 match
+// placement is immediately rebuilt from the new order — same table-default
+// logic as startKoStage() — so the director bracket/public projection/OBS
+// overlay (all driven by getBracketProjection()/event.ko.top16) update
+// live, without a page reload and without touching Block A/B standings or
+// lock state at all. If Top16 hasn't been generated yet, only
+// `top16SeedOrder` changes — computeTop16Seeding()/getTop16Seeding() will
+// pick it up whenever it's next read (preview immediately, or at actual
+// startKoStage('top16') time).
+export const updateTop16SeedOrder = (event, seedOrder) => {
+  const validation = validateTop16SeedOrder(seedOrder);
+  if (!validation.valid) {
+    throw new Error(`updateTop16SeedOrder: ${validation.errors.join('; ')}`);
+  }
+  const eligibility = canEditTop16Seed(event);
+  if (!eligibility.ok) {
+    throw new Error(`updateTop16SeedOrder: ${eligibility.reason}`);
+  }
+  let nextEvent = { ...event, top16SeedOrder: seedOrder };
+  if (nextEvent.ko.top16) {
+    const pairings = computeTop16Seeding(nextEvent);
+    const tableLabels = nextEvent.tables.map((t) => t.label).slice(0, KO_DEFAULT_TABLE_COUNT.top16);
+    nextEvent = { ...nextEvent, ko: { ...nextEvent.ko, top16: createKoStage(pairings, tableLabels) } };
+  }
+  return nextEvent;
+};
+
+// RESET TO DEFAULT SEED — restores EXACTLY DEFAULT_TOP16_SEED_ORDER, subject
+// to the same safe-editing-window/rebuild behavior as updateTop16SeedOrder().
+export const resetTop16SeedOrder = (event) => updateTop16SeedOrder(event, DEFAULT_TOP16_SEED_ORDER);
 
 // ---------------------------------------------------------------------------
 // KO progression — Top16 -> Quarterfinals -> Semifinals -> Final.
@@ -1045,6 +1179,13 @@ export const validateCanalettoEvent = (event) => {
         }
       });
     }
+  }
+  // Optional, like `ko`/`schedule` above: an event saved before this Top16
+  // seed-editor hotfix won't have it — getTop16SeedOrder() already falls
+  // back to DEFAULT_TOP16_SEED_ORDER, so absence is never rejected here.
+  if ('top16SeedOrder' in event && event.top16SeedOrder != null) {
+    const result = validateTop16SeedOrder(event.top16SeedOrder);
+    if (!result.valid) errors.push(...result.errors.map((e) => `top16SeedOrder: ${e}`));
   }
   ['blockA', 'blockB'].forEach((key) => {
     const result = validateApplicationState(event[key]);

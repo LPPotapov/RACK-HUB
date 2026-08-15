@@ -6,6 +6,7 @@ import {
   assignKoTable,
   confirmKoTables,
   createCanalettoEvent,
+  getBracketProjection,
   getKoGbrWeight,
   lockBlock,
   recordBlockMatchResult,
@@ -13,7 +14,8 @@ import {
   setEventTables,
   startBlock,
   startTop16,
-  updateKoGbrWeight
+  updateKoGbrWeight,
+  updateTop16SeedOrder
 } from '../src/application/canalettoEvent.js';
 import {
   createCanalettoLiveState,
@@ -85,6 +87,40 @@ test('derivePublicState includes the public-safe whitelist', () => {
   assert.deepEqual(publicState.ko, event.ko);
   assert.equal(publicState.koGbrWeight, event.koGbrWeight);
   assert.equal(getKoGbrWeight({ koGbrWeight: publicState.koGbrWeight }), 0.75);
+
+  assert.deepEqual(publicState.top16SeedOrder, event.top16SeedOrder);
+});
+
+test('public projection (getBracketProjection) uses the director-configured Top16 seed order — one authoritative bracket, director and public agree', () => {
+  let event = createCanalettoEvent({ roundsPerBlock: 1, racksPerMatch: 8, qualificationThreshold: 8 });
+  event = setEventTables(event, tablesOf(4));
+  rosterOf(16).forEach((p) => { event = addPlayerToBlock(event, 'A', p); });
+  rosterOf(16, 100).forEach((p) => { event = addPlayerToBlock(event, 'B', p); });
+  event = startBlock(event, 'A');
+  event = startBlock(event, 'B');
+  ['A', 'B'].forEach((block) => {
+    event[`block${block}`].tournament.rounds[1].forEach((m) => {
+      event = recordBlockMatchResult(event, block, { roundNumber: 1, matchId: m.id, r1: 5, r2: 3 });
+    });
+  });
+  event = lockBlock(event, 'A');
+  event = lockBlock(event, 'B');
+
+  const customOrder = [
+    ['B1', 'A8'], ['A1', 'B8'], ['A2', 'B7'], ['B2', 'A7'],
+    ['A3', 'B6'], ['B3', 'A6'], ['A4', 'B5'], ['B4', 'A5']
+  ];
+  event = updateTop16SeedOrder(event, customOrder);
+
+  const directorProjection = getBracketProjection(event);
+  const publicProjection = getBracketProjection(derivePublicState(event, null));
+
+  assert.equal(directorProjection.top16[0].top.seed, 'B1');
+  assert.equal(directorProjection.top16[0].bottom.seed, 'A8');
+  assert.deepEqual(
+    publicProjection.top16.map((m) => [m.top.seed, m.bottom.seed]),
+    directorProjection.top16.map((m) => [m.top.seed, m.bottom.seed])
+  );
 });
 
 test('derivePublicState strips pendingPlayers from both blocks', () => {

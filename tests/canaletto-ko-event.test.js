@@ -70,9 +70,10 @@ test('starting Top16 creates exactly 8 real matches with the exact A/B seed rela
   let event = startTop16(readyForTop16());
   assert.equal(event.ko.top16.matches.length, 8);
   const seedPairs = event.ko.top16.matches.map((m) => `${m.p1.seed} vs ${m.p2.seed}`);
+  // Live hotfix — authoritative default Top16 bracket placement.
   assert.deepEqual(seedPairs, [
-    'A1 vs B8', 'B1 vs A8', 'A2 vs B7', 'B2 vs A7',
-    'A3 vs B6', 'B3 vs A6', 'A4 vs B5', 'B4 vs A5'
+    'A1 vs B8', 'A4 vs B5', 'A6 vs B3', 'A7 vs B2',
+    'A2 vs B7', 'A3 vs B6', 'A5 vs B4', 'A8 vs B1'
   ]);
 });
 
@@ -94,23 +95,28 @@ test('cannot start Quarterfinals before Top16 is complete', () => {
 test('full Top16 -> Quarterfinals -> Semifinals -> Final propagation with no reseeding', () => {
   let event = startTop16(readyForTop16());
   // p1 (the "top" seed of every pairing) wins every match throughout.
+  // New default Top16 placement (live hotfix): M1 A1-B8, M2 A4-B5, M3 A6-B3,
+  // M4 A7-B2, M5 A2-B7, M6 A3-B6, M7 A5-B4, M8 A8-B1 — winners A1/A4/A6/A7/
+  // A2/A3/A5/A8. QF1=M1+M2->A1 v A4, QF2=M3+M4->A6 v A7, QF3=M5+M6->A2 v A3,
+  // QF4=M7+M8->A5 v A8 (QF progression itself, M1/M2 -> QF1 etc., is
+  // UNCHANGED — only which qualifier occupies each M-slot changed).
   event = winEveryMatch(event, 'top16');
   event = startKoStage(event, 'quarterfinals');
   assert.equal(event.ko.quarterfinals.matches.length, 4);
   assert.equal(event.ko.quarterfinals.matches[0].p1.seed, 'A1');
-  assert.equal(event.ko.quarterfinals.matches[0].p2.seed, 'B1');
+  assert.equal(event.ko.quarterfinals.matches[0].p2.seed, 'A4');
 
   event = winEveryMatch(event, 'quarterfinals');
   event = startKoStage(event, 'semifinals');
   assert.equal(event.ko.semifinals.matches.length, 2);
   assert.equal(event.ko.semifinals.matches[0].p1.seed, 'A1');
-  assert.equal(event.ko.semifinals.matches[0].p2.seed, 'A2');
+  assert.equal(event.ko.semifinals.matches[0].p2.seed, 'A6');
 
   event = winEveryMatch(event, 'semifinals');
   event = startKoStage(event, 'final');
   assert.equal(event.ko.final.matches.length, 1);
   assert.equal(event.ko.final.matches[0].p1.seed, 'A1');
-  assert.equal(event.ko.final.matches[0].p2.seed, 'A3');
+  assert.equal(event.ko.final.matches[0].p2.seed, 'A2');
 
   event = recordKoResult(event, 'final', { matchNumber: 1, r1: 9, r2: 6 });
   const champion = getKoChampion(event);

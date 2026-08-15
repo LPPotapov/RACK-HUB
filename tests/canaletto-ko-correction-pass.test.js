@@ -92,7 +92,9 @@ test('bracket propagation is unchanged by the slot split: QF1 is still winner(M1
   });
   event = startKoStage(event, 'quarterfinals');
   assert.equal(event.ko.quarterfinals.matches[0].p1.seed, 'A1');
-  assert.equal(event.ko.quarterfinals.matches[0].p2.seed, 'B1');
+  // Live hotfix default placement: M2 is A4-B5, not B1-A8 — QF1 = winner(M1)
+  // v winner(M2) is unchanged as a RULE, only which qualifier sits at M2.
+  assert.equal(event.ko.quarterfinals.matches[0].p2.seed, 'A4');
 });
 
 // ---------------------------------------------------------------------------

@@ -28,7 +28,11 @@
 //     SAME frozenMatchDisplay() the admin UI already uses), started.
 //   - top-level: settings, schedule, blockALock/blockBLock (frozen
 //     qualifiers — also the Top16 seeding source), block table
-//     confirmation lists, ko (all stages/results), koGbrWeight.
+//     confirmation lists, ko (all stages/results), koGbrWeight,
+//     top16SeedOrder (director-editable Top16 bracket seed placement — see
+//     getTop16Seeding()/getBracketProjection() in canalettoEvent.js; this is
+//     what makes the public/OBS bracket resolve the SAME placement as the
+//     director app, with no separate public bracket-mapping logic).
 //   - tables, reduced to {order, label} only.
 //
 // EXCLUDED (director-only operational state — never copied here):
@@ -125,5 +129,6 @@ export const derivePublicState = (event, liveState) => toJsonSafe({
   blockATableConfirmations: event.blockATableConfirmations,
   blockBTableConfirmations: event.blockBTableConfirmations,
   ko: event.ko,
-  koGbrWeight: event.koGbrWeight
+  koGbrWeight: event.koGbrWeight,
+  top16SeedOrder: event.top16SeedOrder
 });

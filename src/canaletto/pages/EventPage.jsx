@@ -1,13 +1,19 @@
 import { useEffect, useState } from 'react';
 import {
+  DEFAULT_TOP16_SEED_ORDER,
+  TOP16_SEED_REFS,
   canEditSettings,
+  canEditTop16Seed,
   getBlockStatus,
   getKoGbrWeight,
+  getTop16SeedOrder,
   getTop16Status,
   setEventTables,
   updateCanalettoSchedule,
   updateCanalettoSettings,
-  updateKoGbrWeight
+  updateKoGbrWeight,
+  updateTop16SeedOrder,
+  validateTop16SeedOrder
 } from '../../application/canalettoEvent.js';
 import { parseEuDateTimeInputs, toEuDateInputValue, toEuTimeInputValue } from '../schedule.js';
 import { TableConfigModal } from '../TableConfigModal.jsx';
@@ -157,6 +163,80 @@ const KoGbrWeightModal = ({ event, run, onClose }) => {
   );
 };
 
+// Manual Top16 seed editor (live hotfix) — director-only, pop-up modal like
+// the other Event Settings controls above. Edits ONLY seed REFERENCES
+// (A1-A8/B1-B8), never player names directly (docs task item 4) — draft
+// state is entirely local until CONFIRM TOP16 SEED (docs task item 7)
+// commits it via the single updateTop16SeedOrder() command, which itself
+// re-validates and re-checks the safe-editing-window server-side (the local
+// `validation`/`eligibility` checks below are just live UI feedback, not a
+// second source of truth).
+const Top16SeedEditorModal = ({ event, run, onClose }) => {
+  const [draft, setDraft] = useState(() => getTop16SeedOrder(event).map((pair) => [...pair]));
+  const eligibility = canEditTop16Seed(event);
+  const validation = validateTop16SeedOrder(draft);
+
+  const setSlot = (matchIndex, slotIndex, value) => {
+    setDraft((prev) => prev.map((pair, i) => {
+      if (i !== matchIndex) return pair;
+      const next = [...pair];
+      next[slotIndex] = value;
+      return next;
+    }));
+  };
+
+  const confirm = () => {
+    if (run(updateTop16SeedOrder, draft)) onClose();
+  };
+
+  return (
+    <ModalShell title="Edit Top16 Seed" maxWidth="max-w-2xl" onClose={onClose}>
+      <div className="mb-3 text-xs text-canaletto-lavender">
+        Rearrange which frozen qualifier seed sits in each Top16 bracket match (M1-M8). Only seed references are
+        edited here — player identities always resolve from the locked Block A/B rankings.
+      </div>
+      {!eligibility.ok ? (
+        <div className="rounded border border-canaletto-magenta/50 bg-canaletto-magenta/10 px-3 py-2 font-condensed text-xs font-bold uppercase tracking-wide text-canaletto-magenta">
+          {eligibility.reason}
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {draft.map((pair, i) => (
+              <div key={i} className="flex items-center gap-2 rounded border border-canaletto-border bg-canaletto-panel2 px-3 py-2">
+                <span className="w-7 shrink-0 font-condensed text-xs font-bold uppercase tracking-widest text-canaletto-lavender">M{i + 1}</span>
+                <select className="input flex-1" value={pair[0]} onChange={(e) => setSlot(i, 0, e.target.value)}>
+                  {TOP16_SEED_REFS.map((ref) => <option key={ref} value={ref}>{ref}</option>)}
+                </select>
+                <span className="text-xs text-canaletto-lavender">vs</span>
+                <select className="input flex-1" value={pair[1]} onChange={(e) => setSlot(i, 1, e.target.value)}>
+                  {TOP16_SEED_REFS.map((ref) => <option key={ref} value={ref}>{ref}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+          {!validation.valid && (
+            <div className="mt-3 rounded border border-canaletto-magenta/50 bg-canaletto-magenta/10 px-3 py-2 text-xs text-canaletto-magenta">
+              {validation.errors.join(' · ')}
+            </div>
+          )}
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+            <ActionButton variant="outline" className="px-3 py-1 text-xs" onClick={() => setDraft(DEFAULT_TOP16_SEED_ORDER.map((pair) => [...pair]))}>
+              Reset to Default Seed
+            </ActionButton>
+            <div className="flex gap-2">
+              <ActionButton variant="outline" onClick={onClose}>Cancel</ActionButton>
+              <ActionButton variant="magenta" disabled={!validation.valid} onClick={confirm}>
+                Confirm Top16 Seed — Update Official Bracket
+              </ActionButton>
+            </div>
+          </div>
+        </>
+      )}
+    </ModalShell>
+  );
+};
+
 const BlockCard = ({ label, status, playerCount, roundLine }) => (
   <Panel accent={status === 'RUNNING' ? 'magenta' : 'gold'}>
     <div className="flex items-start justify-between">
@@ -178,6 +258,7 @@ export const EventPage = ({ event, run, onNavigate, cloudAuth }) => {
   const [showTableConfig, setShowTableConfig] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
   const [showKoGbrWeight, setShowKoGbrWeight] = useState(false);
+  const [showTop16SeedEditor, setShowTop16SeedEditor] = useState(false);
 
   const statusA = getBlockStatus(event, 'A');
   const statusB = getBlockStatus(event, 'B');
@@ -296,6 +377,7 @@ export const EventPage = ({ event, run, onNavigate, cloudAuth }) => {
         <ActionButton variant="outline" onClick={() => setShowTableConfig(true)}>Table Configuration</ActionButton>
         <ActionButton variant="outline" onClick={() => setShowSchedule(true)}>Time Schedule</ActionButton>
         <ActionButton variant="outline" onClick={() => setShowKoGbrWeight(true)}>KO GBR Weight</ActionButton>
+        <ActionButton variant="outline" onClick={() => setShowTop16SeedEditor(true)}>Edit Top16 Seed</ActionButton>
         <span className="text-xs text-canaletto-lavender">
           {event.tables.length > 0 ? `${event.tables.length} tables configured` : 'No tables configured yet'}
           {' · '}KO GBR Weight {Math.round(getKoGbrWeight(event) * 100)}%
@@ -314,6 +396,9 @@ export const EventPage = ({ event, run, onNavigate, cloudAuth }) => {
       )}
       {showKoGbrWeight && (
         <KoGbrWeightModal event={event} run={run} onClose={() => setShowKoGbrWeight(false)} />
+      )}
+      {showTop16SeedEditor && (
+        <Top16SeedEditorModal event={event} run={run} onClose={() => setShowTop16SeedEditor(false)} />
       )}
     </div>
   );

@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  DEFAULT_TOP16_SEED_ORDER,
   addPlayerToBlock,
   advanceBlockRound,
+  canEditTop16Seed,
   canLockBlock,
   computeTop16Seeding,
   createCanalettoEvent,
@@ -14,11 +16,15 @@ import {
   getTop16Status,
   lockBlock,
   recordBlockMatchResult,
+  recordKoResult,
+  resetTop16SeedOrder,
   setEventTables,
   startBlock,
   startTop16,
   updateCanalettoSettings,
-  validateCanalettoEvent
+  updateTop16SeedOrder,
+  validateCanalettoEvent,
+  validateTop16SeedOrder
 } from '../src/application/canalettoEvent.js';
 import { createConfig } from '../src/domain/tournamentModel.js';
 
@@ -164,12 +170,140 @@ test('both blocks locked makes Top16 READY and generates the exact 8 seed pairin
   const pairings = computeTop16Seeding(event);
   assert.equal(pairings.length, 8);
   const seedPairs = pairings.map((p) => `${p.top.seed} vs ${p.bottom.seed}`);
+  // Live hotfix — authoritative default Top16 bracket PLACEMENT (director-
+  // supplied M1-M8 ordering; do not sort/reinterpret). Same 8 qualifier
+  // pairs as before, different bracket match assignment.
   assert.deepEqual(seedPairs, [
-    'A1 vs B8', 'B1 vs A8',
-    'A2 vs B7', 'B2 vs A7',
-    'A3 vs B6', 'B3 vs A6',
-    'A4 vs B5', 'B4 vs A5'
+    'A1 vs B8', 'A4 vs B5',
+    'A6 vs B3', 'A7 vs B2',
+    'A2 vs B7', 'A3 vs B6',
+    'A5 vs B4', 'A8 vs B1'
   ]);
+});
+
+test('every A1-A8 and B1-B8 qualifier appears exactly once across the default Top16 seed order', () => {
+  let event = eventWithRosters(16);
+  event = updateCanalettoSettings(event, { qualificationThreshold: 8 });
+  event = startBlock(event, 'A');
+  event = startBlock(event, 'B');
+  event = completeCurrentRound(event, 'A');
+  event = completeCurrentRound(event, 'B');
+  event = lockBlock(event, 'A');
+  event = lockBlock(event, 'B');
+
+  const pairings = computeTop16Seeding(event);
+  const refs = pairings.flatMap((p) => [p.top.seed, p.bottom.seed]);
+  ['A', 'B'].forEach((block) => {
+    for (let n = 1; n <= 8; n++) {
+      assert.equal(refs.filter((r) => r === `${block}${n}`).length, 1, `${block}${n} must appear exactly once`);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Top16 seed EDITOR (live hotfix) — manual seed placement, validation, safe
+// editing window, and persistence.
+// ---------------------------------------------------------------------------
+
+const lockedReadyEvent = () => {
+  let event = eventWithRosters(16);
+  event = updateCanalettoSettings(event, { qualificationThreshold: 8 });
+  event = startBlock(event, 'A');
+  event = startBlock(event, 'B');
+  event = completeCurrentRound(event, 'A');
+  event = completeCurrentRound(event, 'B');
+  event = lockBlock(event, 'A');
+  event = lockBlock(event, 'B');
+  return event;
+};
+
+const CUSTOM_SEED_ORDER = [
+  ['B1', 'A8'], ['A1', 'B8'], ['A2', 'B7'], ['B2', 'A7'],
+  ['A3', 'B6'], ['B3', 'A6'], ['A4', 'B5'], ['B4', 'A5']
+];
+
+test('resetTop16SeedOrder restores EXACTLY the default preset', () => {
+  const event = updateTop16SeedOrder(createCanalettoEvent(), CUSTOM_SEED_ORDER);
+  const reset = resetTop16SeedOrder(event);
+  assert.deepEqual(reset.top16SeedOrder, DEFAULT_TOP16_SEED_ORDER);
+});
+
+test('validateTop16SeedOrder rejects a duplicate seed', () => {
+  const bad = [
+    ['A1', 'A1'], ['A2', 'B7'], ['A3', 'B6'], ['A4', 'B5'],
+    ['A5', 'B4'], ['A6', 'B3'], ['A7', 'B2'], ['A8', 'B1']
+  ];
+  const result = validateTop16SeedOrder(bad);
+  assert.equal(result.valid, false);
+  assert.ok(result.errors.some((e) => e.includes('Duplicate')));
+});
+
+test('validateTop16SeedOrder rejects a missing seed', () => {
+  const bad = [
+    ['A1', 'B8'], ['A2', 'B7'], ['A3', 'B6'], ['A4', 'B5'],
+    ['A5', 'B4'], ['A6', 'B3'], ['A7', 'B2'], ['A7', 'B1'] // A8 missing, A7 duplicated
+  ];
+  const result = validateTop16SeedOrder(bad);
+  assert.equal(result.valid, false);
+  assert.ok(result.errors.some((e) => e.includes('Missing seed "A8"')));
+});
+
+test('updateTop16SeedOrder rejects an invalid order and leaves the event unchanged', () => {
+  const event = createCanalettoEvent();
+  assert.throws(() => updateTop16SeedOrder(event, [['A1', 'A1']]), /Seed order must contain exactly 8 matches/);
+});
+
+test('a valid custom seed order persists and getTop16Seeding/computeTop16Seeding resolve the correct frozen qualifiers through it', () => {
+  const event = updateTop16SeedOrder(lockedReadyEvent(), CUSTOM_SEED_ORDER);
+  assert.deepEqual(event.top16SeedOrder, CUSTOM_SEED_ORDER);
+
+  const strict = computeTop16Seeding(event);
+  const preview = getTop16Seeding(event);
+  assert.deepEqual(strict, preview);
+  assert.equal(strict[0].top.seed, 'B1');
+  assert.equal(strict[0].bottom.seed, 'A8');
+  assert.equal(strict[0].top.playerId, event.blockBLock.qualifiers[0].playerId);
+  assert.equal(strict[0].bottom.playerId, event.blockALock.qualifiers[7].playerId);
+});
+
+test('the Top16 seed editor works before either block is locked, using bare seed references', () => {
+  const event = updateTop16SeedOrder(createCanalettoEvent(), CUSTOM_SEED_ORDER);
+  const preview = getTop16Seeding(event);
+  assert.equal(preview[0].top.seed, 'B1');
+  assert.equal(preview[0].top.placeholder, true);
+});
+
+test('confirming a custom seed order after blocks are locked but before Top16 starts is picked up when Top16 is generated', () => {
+  const event = updateTop16SeedOrder(lockedReadyEvent(), CUSTOM_SEED_ORDER);
+  const started = startTop16(event);
+  assert.equal(started.ko.top16.matches[0].p1.seed, 'B1');
+  assert.equal(started.ko.top16.matches[0].p2.seed, 'A8');
+});
+
+test('confirming a custom seed order AFTER Top16 has already started (no results yet) immediately rebuilds the Top16 match placement', () => {
+  let event = startTop16(lockedReadyEvent());
+  assert.equal(event.ko.top16.matches[0].p1.seed, 'A1'); // still default placement
+  event = updateTop16SeedOrder(event, CUSTOM_SEED_ORDER);
+  assert.equal(event.ko.top16.matches[0].p1.seed, 'B1');
+  assert.equal(event.ko.top16.matches[0].p2.seed, 'A8');
+  assert.equal(event.ko.top16.matches.length, 8);
+});
+
+test('editing is blocked once ANY official Top16 result has been recorded — director must reset Top16 first', () => {
+  let event = startTop16(lockedReadyEvent());
+  const firstMatch = event.ko.top16.matches[0];
+  assert.equal(canEditTop16Seed(event).ok, true);
+
+  event = recordKoResult(event, 'top16', { matchNumber: firstMatch.matchNumber, r1: 7, r2: 2 });
+
+  const eligibility = canEditTop16Seed(event);
+  assert.equal(eligibility.ok, false);
+  assert.match(eligibility.reason, /TOP16 SEED LOCKED/);
+  assert.throws(() => updateTop16SeedOrder(event, CUSTOM_SEED_ORDER), /TOP16 SEED LOCKED/);
+
+  // Resetting Top16 (existing danger-zone command) re-enables editing.
+  const afterReset = { ...event, ko: { ...event.ko, top16: null } };
+  assert.equal(canEditTop16Seed(afterReset).ok, true);
 });
 
 test('TOP 16 STARTEN only becomes available once both blocks are locked, and generates 8 real matches', () => {
