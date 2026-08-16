@@ -3,8 +3,8 @@
 // (dark plum surfaces, gold/magenta accents, condensed uppercase headings),
 // not a general design system.
 
-import { useEffect, useState } from 'react';
-import { resolveScoreField, useDraftScorePublish } from './scoreEntry.js';
+import { useEffect, useRef, useState } from 'react';
+import { publishDraftScoreChange, resolveScoreField } from './scoreEntry.js';
 
 export const PageHeader = ({ eyebrow, title, subtitle, right }) => (
   <div className="mb-4 flex flex-wrap items-start justify-between gap-4 border-b border-canaletto-border pb-3">
@@ -282,7 +282,7 @@ const MissingTrigger = ({ match, roundNumber, onMarkMissing }) => {
 // canalettoLive.js's setLiveDraftScore()) so the public livescore page can
 // show it before the match is officially complete — display-only, never
 // fed into onSubmit/recordBlockMatchResult(). Gated on `editing &&
-// !match.done` (see useDraftScorePublish's own comment): a re-opened,
+// !match.done` (see publishDraftScoreChange's own comment): a re-opened,
 // already-official match being corrected does NOT publish a draft — the
 // public page keeps showing the still-valid official result for the
 // duration of that correction, never a possibly-abandoned in-progress edit
@@ -293,14 +293,30 @@ export const MatchRow = ({ match, disabled, onTableChange, onSubmit, onMarkMissi
   const [r1, setR1] = useState(match.done ? String(match.r1) : '');
   const [r2, setR2] = useState(match.done ? String(match.r2) : '');
   const [editing, setEditing] = useState(!match.done);
+  const lastPublishedDraftRef = useRef(null);
 
   useEffect(() => {
     setR1(match.done ? String(match.r1) : '');
     setR2(match.done ? String(match.r2) : '');
     setEditing(!match.done);
+    lastPublishedDraftRef.current = null;
   }, [match.id, match.done, match.r1, match.r2]);
 
-  useDraftScorePublish(editing && !match.done && !disabled, r1, r2, onDraftChange);
+  // Publishes DIRECTLY from the field's own onChange handler — see
+  // scoreEntry.js's publishDraftScoreChange() comment for why this replaced
+  // a separate useEffect-based debounce. Gated the same way the old effect
+  // was: `editing && !match.done && !disabled`.
+  const draftPublishEnabled = editing && !match.done && !disabled;
+  const handleR1Change = (e) => {
+    const value = e.target.value;
+    setR1(value);
+    publishDraftScoreChange(value, r2, lastPublishedDraftRef, draftPublishEnabled ? onDraftChange : undefined);
+  };
+  const handleR2Change = (e) => {
+    const value = e.target.value;
+    setR2(value);
+    publishDraftScoreChange(r1, value, lastPublishedDraftRef, draftPublishEnabled ? onDraftChange : undefined);
+  };
 
   if (match.bye) {
     if (match.canalettoMissing) {
@@ -360,7 +376,7 @@ export const MatchRow = ({ match, disabled, onTableChange, onSubmit, onMarkMissi
             <input
               type="number"
               value={r1}
-              onChange={(e) => setR1(e.target.value)}
+              onChange={handleR1Change}
               disabled={disabled}
               placeholder="—"
               className="w-11 rounded border border-canaletto-border bg-canaletto-panel px-1 py-0.5 text-center text-canaletto-cream disabled:opacity-50"
@@ -369,7 +385,7 @@ export const MatchRow = ({ match, disabled, onTableChange, onSubmit, onMarkMissi
             <input
               type="number"
               value={r2}
-              onChange={(e) => setR2(e.target.value)}
+              onChange={handleR2Change}
               disabled={disabled}
               placeholder="—"
               className="w-11 rounded border border-canaletto-border bg-canaletto-panel px-1 py-0.5 text-center text-canaletto-cream disabled:opacity-50"

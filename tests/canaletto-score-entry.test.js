@@ -1,25 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseDraftScoreField, resolveScoreField } from '../src/canaletto/scoreEntry.js';
+import { draftScorePublishPair, parseDraftScoreField, publishDraftScoreChange, resolveScoreField } from '../src/canaletto/scoreEntry.js';
 import { recordMatchResult } from '../src/application/tournamentCommands.js';
 import { startTournament } from '../src/application/tournamentCommands.js';
 import { createApplicationState, createConfig, createTournamentState } from '../src/domain/tournamentModel.js';
 
-// react-free re-implementation of useDraftScorePublish's PUBLISHABILITY
-// decision (the part that isn't the React effect/debounce plumbing itself)
-// — this repo's `node --test` runner has no DOM/React renderer, so the hook
-// itself is exercised indirectly here and directly via the live end-to-end
-// helper-chain tests in canaletto-live.test.js/canaletto-public-state.test.js;
-// this local helper isolates JUST the "is this (r1, r2) pair publishable"
-// logic for focused regression coverage without needing a React harness.
-const isDraftPublishable = (r1, r2) => {
-  const bothBlank = String(r1 ?? '').trim() === '' && String(r2 ?? '').trim() === '';
-  if (bothBlank) return null;
-  const n1 = parseDraftScoreField(r1);
-  const n2 = parseDraftScoreField(r2);
-  if (n1 === null || n2 === null) return null;
-  return [n1, n2];
-};
+// draftScorePublishPair is the exact PUBLISHABILITY decision used by
+// publishDraftScoreChange() (called directly from MatchRow/KoMatchCard's
+// score-field onChange handlers — see scoreEntry.js). Aliased here as
+// isDraftPublishable purely so the existing test names below (which predate
+// the direct-handler pass) keep reading naturally.
+const isDraftPublishable = draftScorePublishPair;
 
 test('resolveScoreField: an untouched/blank field resolves to the canonical missing value (0)', () => {
   assert.equal(resolveScoreField(''), 0);
@@ -65,7 +56,7 @@ test('one score + untouched opposite field autocompletes via the existing record
 // resolveScoreField()'s blank->0 convention: an untouched side of an
 // in-progress draft reads as 0, the same as it will at final Confirm. The
 // PRIOR version returned `null` for a blank field, which — combined with
-// useDraftScorePublish's "both sides must be non-null" gate — was the root
+// the old publish gate's "both sides must be non-null" rule — was the root
 // cause of the reported end-to-end break: clicking the native number
 // input's up-arrow on only ONE side (leaving the other blank) silently
 // never published anything at all.
@@ -90,9 +81,9 @@ test('parseDraftScoreField: negative, non-integer, and non-numeric input never p
 });
 
 // ---------------------------------------------------------------------------
-// useDraftScorePublish's publishability decision (isDraftPublishable above)
-// — the ACTUAL boundary that was broken end-to-end. Reproduces the exact
-// bug-report repro steps.
+// draftScorePublishPair's decision (isDraftPublishable above) — the ACTUAL
+// boundary that was broken end-to-end. Reproduces the exact bug-report
+// repro steps.
 // ---------------------------------------------------------------------------
 
 test('BUG REPRO (fixed): clicking the up-arrow on only ONE side (other still blank) is now publishable, treating the untouched side as 0 — "0-0 -> click up -> 1-0"', () => {
@@ -121,6 +112,72 @@ test('a malformed non-blank side (negative/non-integer) still blocks publishing 
   assert.equal(isDraftPublishable('-1', '3'), null);
   assert.equal(isDraftPublishable('4', '4.5'), null);
   assert.equal(isDraftPublishable('abc', '3'), null);
+});
+
+// ---------------------------------------------------------------------------
+// publishDraftScoreChange — the actual function MatchRow/KoMatchCard's r1
+// and r2 onChange handlers call DIRECTLY (urgent hotfix, direct-handler
+// pass: native number-input stepper clicks were not reliably reaching the
+// public page through the PRIOR useEffect-based debounce — see the
+// live-draft investigation report). This is the boundary the score-field
+// handler itself now owns: the event that changes the field is the exact
+// call that decides whether/what to publish, with no effect/dependency
+// array in between. `lastPublishedRef` mirrors the real `useRef(null)` each
+// match-card instance owns.
+// ---------------------------------------------------------------------------
+
+test('publishDraftScoreChange: a Player A field change (r1) invokes onPublish with the new pair, Player B untouched/blank read as 0', () => {
+  const published = [];
+  const lastPublishedRef = { current: null };
+  // Simulates MatchRow/KoMatchCard's handleR1Change: value=r1 just typed, r2 still blank.
+  publishDraftScoreChange('1', '', lastPublishedRef, (n1, n2) => published.push([n1, n2]));
+  assert.deepEqual(published, [[1, 0]]);
+});
+
+test('publishDraftScoreChange: a Player B field change (r2) invokes onPublish with the new pair, Player A untouched/blank read as 0', () => {
+  const published = [];
+  const lastPublishedRef = { current: null };
+  // Simulates handleR2Change: value=r2 just typed, r1 still blank.
+  publishDraftScoreChange('', '1', lastPublishedRef, (n1, n2) => published.push([n1, n2]));
+  assert.deepEqual(published, [[0, 1]]);
+});
+
+test('publishDraftScoreChange: a full native-stepper sequence on canalettoTest publishes every distinct value exactly once, in order — 0-0 -> 1-0 -> 2-0 -> 2-1 -> 1-1', () => {
+  const published = [];
+  const lastPublishedRef = { current: null };
+  const onPublish = (n1, n2) => published.push([n1, n2]);
+  publishDraftScoreChange('1', '', lastPublishedRef, onPublish); // A up
+  publishDraftScoreChange('2', '', lastPublishedRef, onPublish); // A up again
+  publishDraftScoreChange('2', '1', lastPublishedRef, onPublish); // B up
+  publishDraftScoreChange('1', '1', lastPublishedRef, onPublish); // A down
+  assert.deepEqual(published, [[1, 0], [2, 0], [2, 1], [1, 1]]);
+});
+
+test('publishDraftScoreChange: an onChange firing with an unchanged pair is NOT re-published (equality guard), but a genuinely new value always is', () => {
+  const published = [];
+  const lastPublishedRef = { current: null };
+  const onPublish = (n1, n2) => published.push([n1, n2]);
+  publishDraftScoreChange('4', '3', lastPublishedRef, onPublish);
+  publishDraftScoreChange('4', '3', lastPublishedRef, onPublish); // identical pair — skipped
+  publishDraftScoreChange('4', '3', lastPublishedRef, onPublish); // identical pair — skipped
+  publishDraftScoreChange('5', '3', lastPublishedRef, onPublish); // new value — published
+  assert.deepEqual(published, [[4, 3], [5, 3]]);
+});
+
+test('publishDraftScoreChange: an unpublishable pair (both blank, or a malformed side) never invokes onPublish', () => {
+  const published = [];
+  const lastPublishedRef = { current: null };
+  const onPublish = (n1, n2) => published.push([n1, n2]);
+  publishDraftScoreChange('', '', lastPublishedRef, onPublish);
+  publishDraftScoreChange('-1', '3', lastPublishedRef, onPublish);
+  publishDraftScoreChange('4', '4.5', lastPublishedRef, onPublish);
+  assert.deepEqual(published, []);
+});
+
+test('publishDraftScoreChange: a disabled/gated call site (onPublish undefined, e.g. editing=false or match.done) is a complete no-op', () => {
+  const lastPublishedRef = { current: null };
+  assert.doesNotThrow(() => publishDraftScoreChange('1', '0', lastPublishedRef, undefined));
+  assert.equal(lastPublishedRef.current, null);
 });
 
 test('both fields blank still rejects, per the existing recordMatchResult() rule', () => {

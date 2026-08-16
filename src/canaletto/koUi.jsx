@@ -6,12 +6,12 @@
 // shape and its blank-side-autocomplete score entry, neither of which
 // applies to a KO race-to match (docs task item 15).
 
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { expectedScore } from '../domain/fixedRackBbs.js';
 import { KO_RACE_TO, KO_TOP16_SLOT_SIZE, isValidKoScore } from '../application/canalettoKo.js';
 import { tvMatchKey as matchPointerKey } from '../application/canalettoLive.js';
 import { parseKoScoreField } from './koScoreEntry.js';
-import { useDraftScorePublish } from './scoreEntry.js';
+import { publishDraftScoreChange } from './scoreEntry.js';
 import { formatScheduleRange } from './schedule.js';
 import { ActionButton, PlayerBlock, formatDelta } from './ui.jsx';
 
@@ -35,14 +35,29 @@ export const KoMatchCard = ({
   const [r1, setR1] = useState(match.done ? String(match.r1) : '');
   const [r2, setR2] = useState(match.done ? String(match.r2) : '');
   const [editing, setEditing] = useState(!match.done);
+  const lastPublishedDraftRef = useRef(null);
 
   useEffect(() => {
     setR1(match.done ? String(match.r1) : '');
     setR2(match.done ? String(match.r2) : '');
     setEditing(!match.done);
+    lastPublishedDraftRef.current = null;
   }, [match.matchNumber, match.done, match.r1, match.r2]);
 
-  useDraftScorePublish(editing && !match.done && !disabled, r1, r2, onDraftChange);
+  // Publishes DIRECTLY from the field's own onChange handler — see
+  // scoreEntry.js's publishDraftScoreChange() comment (same contract as
+  // ui.jsx's MatchRow, shared verbatim here).
+  const draftPublishEnabled = editing && !match.done && !disabled;
+  const handleR1Change = (e) => {
+    const value = e.target.value;
+    setR1(value);
+    publishDraftScoreChange(value, r2, lastPublishedDraftRef, draftPublishEnabled ? onDraftChange : undefined);
+  };
+  const handleR2Change = (e) => {
+    const value = e.target.value;
+    setR2(value);
+    publishDraftScoreChange(r1, value, lastPublishedDraftRef, draftPublishEnabled ? onDraftChange : undefined);
+  };
 
   const n1 = parseKoScoreField(r1);
   const n2 = parseKoScoreField(r2);
@@ -91,7 +106,7 @@ export const KoMatchCard = ({
             <input
               type="number"
               value={r1}
-              onChange={(e) => setR1(e.target.value)}
+              onChange={handleR1Change}
               disabled={disabled}
               placeholder="—"
               className="w-11 rounded border border-canaletto-border bg-canaletto-panel px-1 py-0.5 text-center text-canaletto-cream disabled:opacity-50"
@@ -100,7 +115,7 @@ export const KoMatchCard = ({
             <input
               type="number"
               value={r2}
-              onChange={(e) => setR2(e.target.value)}
+              onChange={handleR2Change}
               disabled={disabled}
               placeholder="—"
               className="w-11 rounded border border-canaletto-border bg-canaletto-panel px-1 py-0.5 text-center text-canaletto-cream disabled:opacity-50"
