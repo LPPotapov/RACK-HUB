@@ -28,7 +28,7 @@ import {
 } from '../../application/canalettoEvent.js';
 import { getLiveDraftScore } from '../../application/canalettoLive.js';
 import { frozenMatchDisplay } from '../matchDisplay.js';
-import { BracketOverview, ChampionBanner } from '../koUi.jsx';
+import { BracketOverview, ChampionBanner, MobileKoStageView } from '../koUi.jsx';
 import { MatchSummaryCard, PageHeader, Panel, SectionHeader, StatusBadge } from '../ui.jsx';
 import { LiveBrandMark, TwoColumnStandings } from './liveComponents.jsx';
 import { EMPTY_PUBLIC_STATE, useCloudPublicEvent } from './useCloudPublicEvent.js';
@@ -42,16 +42,28 @@ const PUBLIC_NAV_ITEMS = [
   { id: 'top16', label: 'Top16', code: '16' }
 ];
 
+// FIXED navigation rail — deliberately never replaced by a horizontal/
+// hamburger mobile nav (docs task item 10, "IMPORTANT CORRECTION"): a
+// participant scrolling far down long content (rounds, standings, a full
+// KO stage) must NEVER have to scroll back to the top just to navigate
+// elsewhere. Below `lg`, it becomes a COMPACT icon-rail (narrower width,
+// smaller logo/padding/text, labels stacked under their badge instead of
+// beside it) rather than a scaled-down desktop sidebar — every nav option
+// and its label stays visible and tappable at every width, just smaller.
+// The page shell (LivescorePage below) makes ONLY the right content
+// scroll — this element itself never needs to scroll on a normal phone
+// (only 4 nav items), so it has no overflow handling of its own.
 const PublicSidebar = ({ event, section, onNavigate }) => (
-  <aside className="flex w-52 shrink-0 flex-col border-r border-canaletto-border bg-canaletto-panel">
-    <div className="flex items-center gap-2 border-b border-canaletto-border px-4 py-4">
-      <LiveBrandMark className="h-9 w-9 shrink-0" />
-      <div>
+  <aside className="flex h-dvh w-16 shrink-0 flex-col border-r border-canaletto-border bg-canaletto-panel sm:w-20 lg:w-52">
+    <div className="flex flex-col items-center gap-1 border-b border-canaletto-border px-1 py-3 lg:flex-row lg:items-center lg:gap-2 lg:px-4 lg:py-4">
+      <LiveBrandMark className="h-7 w-7 shrink-0 lg:h-9 lg:w-9" />
+      <div className="hidden lg:block">
         <div className="font-condensed text-lg font-black uppercase leading-none tracking-wide text-canaletto-cream">{event.settings.title || 'Canaletto'}</div>
         <div className="text-[10px] font-bold uppercase tracking-widest text-canaletto-lavender">Public Livescore</div>
       </div>
+      <div className="text-center text-[8px] font-bold uppercase leading-tight tracking-widest text-canaletto-lavender lg:hidden">Live</div>
     </div>
-    <nav className="flex-1 py-3">
+    <nav className="flex-1 py-2 lg:py-3">
       {PUBLIC_NAV_ITEMS.map((item) => {
         const active = section === item.id;
         return (
@@ -59,16 +71,16 @@ const PublicSidebar = ({ event, section, onNavigate }) => (
             key={item.id}
             type="button"
             onClick={() => onNavigate(item.id)}
-            className={`flex w-full items-center gap-2 border-l-2 px-4 py-2.5 text-left font-condensed text-sm font-bold uppercase tracking-wide transition ${
+            className={`flex w-full flex-col items-center gap-1 border-l-2 px-1 py-3 text-center font-condensed text-[10px] font-bold uppercase tracking-wide transition lg:flex-row lg:gap-2 lg:px-4 lg:py-2.5 lg:text-left lg:text-sm ${
               active
                 ? 'border-canaletto-gold bg-canaletto-panel2 text-canaletto-gold'
                 : 'border-transparent text-canaletto-lavender hover:bg-canaletto-panel2 hover:text-canaletto-cream'
             }`}
           >
-            <span className="flex h-5 w-6 items-center justify-center rounded bg-canaletto-panel2 text-[10px] text-canaletto-lavender">
+            <span className="flex h-5 w-6 shrink-0 items-center justify-center rounded bg-canaletto-panel2 text-[10px] text-canaletto-lavender">
               {item.code}
             </span>
-            <span className="flex-1">{item.label}</span>
+            <span className="flex-1 leading-tight">{item.label}</span>
           </button>
         );
       })}
@@ -216,12 +228,49 @@ const BlockSection = ({ event, block }) => {
   );
 };
 
+const KO_MOBILE_STAGE_TABS = [
+  { id: 'top16', label: 'Top16' },
+  { id: 'quarterfinals', label: 'QF' },
+  { id: 'semifinals', label: 'SF' },
+  { id: 'final', label: 'Final' }
+];
+
+// Below `lg`, the full 4-column desktop bracket (BracketOverview) does not
+// fit a phone width readably (docs task item 10D — "do NOT attempt to
+// squeeze the complete desktop bracket tree into the remaining mobile
+// width"), so this stage tab bar + koUi.jsx's MobileKoStageView replace it
+// with ONE stage's genuinely-readable cards at a time. Local tab state,
+// same "smallest safe implementation" pattern this page already uses for
+// its own top-level `section`/BlockSection's `tab`.
+const MobileKoStageNav = ({ stage, onChange }) => (
+  <div className="mb-3 grid grid-cols-4 gap-1 lg:hidden">
+    {KO_MOBILE_STAGE_TABS.map((s) => (
+      <button
+        key={s.id}
+        type="button"
+        onClick={() => onChange(s.id)}
+        className={`min-w-0 truncate rounded border px-0.5 py-2 text-center font-condensed text-[11px] font-bold uppercase tracking-normal transition ${
+          stage === s.id
+            ? 'border-canaletto-gold bg-canaletto-gold text-black'
+            : 'border-canaletto-border text-canaletto-lavender hover:text-canaletto-cream'
+        }`}
+      >
+        {s.label}
+      </button>
+    ))}
+  </div>
+);
+
 // TOP16 — bracket only (director correction pass item 10): no calibration
 // table, no director match cards, no danger zone, no score-control UI.
 // Reuses koUi.jsx's BracketOverview directly — the SAME projection-driven
 // bracket the director app's Top16 page and the full-screen bracket overlay
 // render, showing Top16/QF/SF/Final with progressive population as each
-// stage is generated.
+// stage is generated. Below `lg`, MobileKoStageNav + koUi.jsx's
+// MobileKoStageView replace it with the SAME projection, one stage at a
+// time (docs task item 10D) — desktop's BracketOverview is otherwise
+// completely unchanged (docs task item 16 — "do not redesign the desktop
+// application").
 const Top16Section = ({ event }) => {
   const status = getTop16Status(event);
   const projection = getBracketProjection(event);
@@ -235,12 +284,21 @@ const Top16Section = ({ event }) => {
   // race target) can never produce a champion here, exactly like the
   // director page.
   const champion = getKoChampion(event);
+  const [mobileStage, setMobileStage] = useState('top16');
 
   return (
     <div>
       <PageHeader eyebrow="Knockout" title="Top 16" right={<StatusBadge status={status} />} />
       <ChampionBanner champion={champion} />
-      <BracketOverview projection={projection} ko={event.ko} schedule={event.schedule} gbrConfig={gbrConfig} liveDraftScores={event.liveDraftScores} />
+
+      <MobileKoStageNav stage={mobileStage} onChange={setMobileStage} />
+      <div className="lg:hidden">
+        <MobileKoStageView projection={projection} ko={event.ko} schedule={event.schedule} gbrConfig={gbrConfig} liveDraftScores={event.liveDraftScores} stage={mobileStage} />
+      </div>
+
+      <div className="hidden lg:block">
+        <BracketOverview projection={projection} ko={event.ko} schedule={event.schedule} gbrConfig={gbrConfig} liveDraftScores={event.liveDraftScores} />
+      </div>
     </div>
   );
 };
@@ -265,10 +323,19 @@ export const LivescorePage = () => {
 
   if (event === EMPTY_PUBLIC_STATE) return <NotLiveYet />;
 
+  // Fixed-sidebar scroll model (docs task item 10A), at EVERY viewport
+  // size: the outer row is pinned to the viewport height and never itself
+  // scrolls (`h-dvh overflow-hidden`) — `dvh` rather than `vh` so mobile
+  // browser chrome showing/hiding never clips or reflows the sidebar (docs
+  // task item 10F). PublicSidebar is a plain flex child (no sticky/fixed
+  // positioning needed — see its own comment) that therefore never moves.
+  // ONLY `<main>` scrolls (`overflow-y-auto`); `min-w-0` stops its content
+  // (grids/tables) from ever forcing the row wider than the viewport (docs
+  // task item 13/14 — "no page-level horizontal overflow").
   return (
-    <div className="flex min-h-screen bg-canaletto-bg text-canaletto-cream">
+    <div className="flex h-dvh overflow-hidden bg-canaletto-bg text-canaletto-cream">
       <PublicSidebar event={event} section={section} onNavigate={setSection} />
-      <main className="flex-1 px-8 py-6">
+      <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
         {section === 'players' && <PlayersSection event={event} />}
         {section === 'blockA' && <BlockSection event={event} block="A" />}
         {section === 'blockB' && <BlockSection event={event} block="B" />}

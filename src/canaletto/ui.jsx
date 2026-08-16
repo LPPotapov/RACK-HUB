@@ -7,9 +7,20 @@ import { useEffect, useRef, useState } from 'react';
 import { matchScoreDisplay } from './matchDisplay.js';
 import { publishDraftScoreChange, resolveScoreField } from './scoreEntry.js';
 
+// Narrow-viewport pass (public Livescore responsive work): below `sm`
+// (640px), a long `right` badge (e.g. StatusBadge's "WAITING FOR BLOCKS")
+// sitting `shrink-0` next to the title on the SAME row could run past the
+// viewport edge and get silently clipped by a scroll container's
+// `overflow-x-hidden`, rather than wrapping — flexbox prefers shrinking the
+// (shrinkable) title block over wrapping a `shrink-0` sibling to its own
+// line when both still nominally "fit" the shrunk row. Stacking vertically
+// below `sm` sidesteps that entirely; at `sm` and above this is BYTE-FOR-
+// BYTE the original side-by-side layout (`sm:flex-row sm:items-start
+// sm:justify-between sm:gap-4`), so every existing desktop/tablet-width
+// usage (director app, public pages at normal widths) is unchanged.
 export const PageHeader = ({ eyebrow, title, subtitle, right }) => (
-  <div className="mb-4 flex flex-wrap items-start justify-between gap-4 border-b border-canaletto-border pb-3">
-    <div>
+  <div className="mb-4 flex flex-col gap-2 border-b border-canaletto-border pb-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-4">
+    <div className="min-w-0">
       {eyebrow && (
         <div className="mb-1 font-condensed text-xs font-bold uppercase tracking-[0.2em] text-canaletto-magenta">
           {eyebrow}
@@ -74,15 +85,18 @@ export const Panel = ({ title, accent = 'gold', right, children, className = '',
   </div>
 );
 
+// Same narrow-viewport stacking fix as PageHeader above, same reason — see
+// its comment. Byte-for-byte the original side-by-side layout at `sm` and
+// above.
 export const SectionHeader = ({ eyebrow, title, right }) => (
-  <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-    <div>
+  <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:gap-3">
+    <div className="min-w-0">
       {eyebrow && (
         <div className="font-condensed text-xs font-bold uppercase tracking-[0.2em] text-canaletto-magenta">{eyebrow}</div>
       )}
       <h2 className="font-condensed text-3xl font-black uppercase tracking-tight text-canaletto-cream">{title}</h2>
     </div>
-    {right && <div className="flex items-center gap-2">{right}</div>}
+    {right && <div className="flex shrink-0 items-center gap-2">{right}</div>}
   </div>
 );
 

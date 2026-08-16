@@ -284,8 +284,16 @@ const BracketProjectedNode = ({ slot, target, showSeed }) => (
 // defaults to false — only Top16's two calls (see BracketOverview) pass
 // true; A/B seed labels are source-seeding information specific to Top16
 // and would misleadingly read as ongoing Block seeding in QF/SF/Final.
-const BracketNodeList = ({ slots, target, tablesConfirmed, gbrConfig, showSeed = false, stage, liveDraftScores }) => (
-  <div className="flex flex-1 flex-col justify-around gap-1">
+// `className` (public Livescore responsive pass, optional): overrides the
+// default single-column flex list — MobileKoStageView (below) passes a grid
+// class instead, so a narrow-viewport stage view can lay the SAME
+// BracketNode/BracketProjectedNode cards out 2-up in landscape, without a
+// second card-rendering implementation. Exported (was previously
+// module-local) so MobileKoStageView can reuse it directly; BracketOverview
+// itself never passes `className`, so its own (desktop, OBS-overlay-shared)
+// output is byte-for-byte unchanged.
+export const BracketNodeList = ({ slots, target, tablesConfirmed, gbrConfig, showSeed = false, stage, liveDraftScores, className = 'flex flex-1 flex-col justify-around gap-1' }) => (
+  <div className={className}>
     {slots.map((slot) => (
       slot.real
         ? <BracketNode key={slot.matchNumber} match={slot.match} target={target} tablesConfirmed={tablesConfirmed} gbrConfig={gbrConfig} showSeed={showSeed} stage={stage} liveDraftScores={liveDraftScores} />
@@ -294,7 +302,9 @@ const BracketNodeList = ({ slots, target, tablesConfirmed, gbrConfig, showSeed =
   </div>
 );
 
-const ScheduleLine = ({ entry }) => {
+// Exported (was module-local) so MobileKoStageView can reuse the exact same
+// schedule-estimate line desktop's BracketOverview already renders.
+export const ScheduleLine = ({ entry }) => {
   const text = entry && formatScheduleRange(entry);
   if (!text) return null;
   return <div className="mb-0.5 text-center text-[10px] font-semibold normal-case leading-tight tracking-normal text-canaletto-lavender">{text}</div>;
@@ -363,6 +373,97 @@ export const BracketOverview = ({ projection, ko, schedule, gbrConfig, liveDraft
         <ScheduleLine entry={schedule?.final} />
         <BracketNodeList slots={projection.final} target={KO_RACE_TO.final} tablesConfirmed={ko.final?.tablesConfirmed} gbrConfig={gbrConfig} stage="final" liveDraftScores={liveDraftScores} />
       </div>
+    </div>
+  );
+};
+
+// Narrow-viewport KO view (public Livescore responsive pass) — ONE stage at
+// a time, in genuinely-readable cards, instead of squeezing
+// BracketOverview's fixed 4-column desktop tree into a phone width. Reuses
+// the EXACT SAME BracketNode/BracketProjectedNode cards (via
+// BracketNodeList, ScheduleLine above) desktop uses — only the surrounding
+// grid layout differs per stage, via BracketNodeList's own `className`
+// override. Never a second bracket projection/derivation: `projection` is
+// the SAME getBracketProjection() output BracketOverview receives, and
+// `stage` is one of 'top16'|'quarterfinals'|'semifinals'|'final' (the
+// caller's own stage-tab selection — see LivescorePage.jsx).
+//
+// Column counts per stage (docs task item 10D): Top16's two slots and QF's
+// 4 matches go 2-up in landscape (`landscape:grid-cols-2`) — genuinely
+// readable at a phone-landscape width — but stay single-column in portrait.
+// SF (2 matches) and Final (1 match) stay single-column at every width —
+// already compact enough stacked, and forcing them side-by-side would only
+// shrink already-small cards for no readability gain. Final is additionally
+// centered/width-capped (`max-w-md mx-auto`) so a single race-to match
+// reads as prominent rather than stretched full-width.
+export const MobileKoStageView = ({ projection, ko, schedule, gbrConfig, liveDraftScores, stage }) => {
+  if (stage === 'top16') {
+    const top16Slot1 = projection.top16.slice(0, KO_TOP16_SLOT_SIZE);
+    const top16Slot2 = projection.top16.slice(KO_TOP16_SLOT_SIZE);
+    return (
+      <div className="space-y-4">
+        <div>
+          <div className="mb-1 text-center text-[10px] font-bold uppercase leading-tight tracking-widest text-canaletto-magenta">Slot 1</div>
+          <ScheduleLine entry={schedule?.top16Slot1} />
+          <BracketNodeList
+            slots={top16Slot1}
+            target={KO_RACE_TO.top16}
+            tablesConfirmed={ko.top16?.tablesConfirmed}
+            gbrConfig={gbrConfig}
+            showSeed
+            stage="top16"
+            liveDraftScores={liveDraftScores}
+            className="grid grid-cols-1 gap-2 landscape:grid-cols-2"
+          />
+        </div>
+        <div>
+          <div className="mb-1 text-center text-[10px] font-bold uppercase leading-tight tracking-widest text-canaletto-magenta">Slot 2</div>
+          <ScheduleLine entry={schedule?.top16Slot2} />
+          <BracketNodeList
+            slots={top16Slot2}
+            target={KO_RACE_TO.top16}
+            tablesConfirmed={ko.top16?.tablesConfirmed}
+            gbrConfig={gbrConfig}
+            showSeed
+            stage="top16"
+            liveDraftScores={liveDraftScores}
+            className="grid grid-cols-1 gap-2 landscape:grid-cols-2"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (stage === 'final') {
+    return (
+      <div className="mx-auto max-w-md">
+        <ScheduleLine entry={schedule?.final} />
+        <BracketNodeList
+          slots={projection.final}
+          target={KO_RACE_TO.final}
+          tablesConfirmed={ko.final?.tablesConfirmed}
+          gbrConfig={gbrConfig}
+          stage="final"
+          liveDraftScores={liveDraftScores}
+          className="grid grid-cols-1 gap-2"
+        />
+      </div>
+    );
+  }
+
+  const gridClass = stage === 'quarterfinals' ? 'grid grid-cols-1 gap-2 landscape:grid-cols-2' : 'grid grid-cols-1 gap-2';
+  return (
+    <div>
+      <ScheduleLine entry={schedule?.[stage]} />
+      <BracketNodeList
+        slots={projection[stage]}
+        target={KO_RACE_TO[stage]}
+        tablesConfirmed={ko[stage]?.tablesConfirmed}
+        gbrConfig={gbrConfig}
+        stage={stage}
+        liveDraftScores={liveDraftScores}
+        className={gridClass}
+      />
     </div>
   );
 };
