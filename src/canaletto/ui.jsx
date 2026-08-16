@@ -4,6 +4,7 @@
 // not a general design system.
 
 import { useEffect, useRef, useState } from 'react';
+import { matchScoreDisplay } from './matchDisplay.js';
 import { publishDraftScoreChange, resolveScoreField } from './scoreEntry.js';
 
 export const PageHeader = ({ eyebrow, title, subtitle, right }) => (
@@ -465,6 +466,10 @@ export const MatchSummaryCard = ({ match, tablesConfirmed, p1Gbr, p2Gbr, p1WinPc
       </div>
     );
   }
+  // Score color pass: matchScoreDisplay() (matchDisplay.js) decides both the
+  // text AND the color state — ORANGE only once `confirmed` (match.done),
+  // WHITE otherwise, regardless of whether a draft value is present.
+  const { text: scoreText, confirmed: scoreConfirmed } = matchScoreDisplay(match, draftScore);
   return (
     <div className="rounded border border-canaletto-border bg-canaletto-panel2 p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -475,8 +480,8 @@ export const MatchSummaryCard = ({ match, tablesConfirmed, p1Gbr, p2Gbr, p1WinPc
       </div>
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
         <PlayerBlock name={match.p1.name} gbr={p1Gbr} winPct={p1WinPct} align="left" />
-        <div className="text-center font-condensed text-xl font-black text-canaletto-gold">
-          {match.done ? `${match.r1} : ${match.r2}` : draftScore ? `${draftScore.r1} : ${draftScore.r2}` : 'vs'}
+        <div className={`text-center font-condensed text-xl font-black ${scoreConfirmed ? 'text-canaletto-gold' : 'text-canaletto-cream'}`}>
+          {scoreText}
         </div>
         <PlayerBlock name={match.p2.name} gbr={p2Gbr} winPct={p2WinPct} align="right" />
       </div>

@@ -16,7 +16,7 @@ import {
   recordBlockMatchResult,
   undoBlockPlayerMissing
 } from '../../application/canalettoEvent.js';
-import { clearLiveDraftScore, setLiveDraftScore } from '../../application/canalettoLive.js';
+import { clearLiveDraftScore, getLiveDraftScore, setLiveDraftScore } from '../../application/canalettoLive.js';
 import { splitForTwoColumnDisplay } from '../layout.js';
 import { frozenMatchDisplay } from '../matchDisplay.js';
 import { formatScheduleRange } from '../schedule.js';
@@ -189,7 +189,13 @@ const RoundView = ({ event, run, block, roundNumber, onAdvanced, liveRun }) => {
 // are derived fresh via getRoundStandings() on every render, so a later
 // correction to an earlier round is reflected automatically without
 // touching any stored pairing.
-const AllRoundsView = ({ event, block }) => {
+// `liveState` (optional, livescore hotfix — All Rounds display-only pass):
+// same getLiveDraftScore()/tvMatchKey() lookup LivescorePage.jsx's own
+// AllRoundsSection already uses for the PUBLIC page — this is what makes
+// the director's own All Rounds view show a match's in-progress live draft
+// score too, instead of only the operational current-round card doing so.
+// Read-only: never writes anything, never affects official match state.
+const AllRoundsView = ({ event, block, liveState }) => {
   const tournament = event[`block${block}`].tournament;
   const rounds = Array.from({ length: tournament.currentRound }, (_, i) => i + 1);
   return (
@@ -203,6 +209,7 @@ const AllRoundsView = ({ event, block }) => {
                 key={m.id}
                 match={m}
                 tablesConfirmed={isRoundTablesConfirmed(event, block, r)}
+                draftScore={!m.bye && !m.done && liveState ? getLiveDraftScore(liveState, { source: 'block', block, roundNumber: r, matchId: m.id }) : null}
                 {...(!m.bye ? frozenMatchDisplay(m, tournament.config) : {})}
               />
             ))}
@@ -278,7 +285,7 @@ const ResultsView = ({ event, run, block }) => {
   );
 };
 
-export const BlockPage = ({ event, run, block, liveRun }) => {
+export const BlockPage = ({ event, run, block, liveState, liveRun }) => {
   const tournament = event[`block${block}`].tournament;
   const status = getBlockStatus(event, block);
   const [subView, setSubView] = useState('round');
@@ -353,7 +360,7 @@ export const BlockPage = ({ event, run, block, liveRun }) => {
       {subView === 'round' && (
         <RoundView event={event} run={run} block={block} roundNumber={viewingRound} onAdvanced={setViewingRound} liveRun={liveRun} />
       )}
-      {subView === 'all' && <AllRoundsView event={event} block={block} />}
+      {subView === 'all' && <AllRoundsView event={event} block={block} liveState={liveState} />}
       {subView === 'results' && <ResultsView event={event} run={run} block={block} />}
 
       <DangerZone event={event} run={run} block={block} status={status} currentRound={tournament.currentRound} />

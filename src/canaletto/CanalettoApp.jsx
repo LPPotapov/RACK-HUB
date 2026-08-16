@@ -40,8 +40,8 @@ function CanalettoApp() {
         )}
         {page === 'event' && <EventPage event={event} run={run} onNavigate={setPage} cloudAuth={cloudAuth} />}
         {page === 'players' && <PlayersPage event={event} run={run} onNavigate={setPage} />}
-        {page === 'blockA' && <BlockPage event={event} run={run} block="A" liveRun={liveRun} />}
-        {page === 'blockB' && <BlockPage event={event} run={run} block="B" liveRun={liveRun} />}
+        {page === 'blockA' && <BlockPage event={event} run={run} block="A" liveState={liveState} liveRun={liveRun} />}
+        {page === 'blockB' && <BlockPage event={event} run={run} block="B" liveState={liveState} liveRun={liveRun} />}
         {page === 'top16' && <Top16Page event={event} run={run} liveState={liveState} liveRun={liveRun} />}
         {page === 'live' && <LivePage event={event} liveState={liveState} run={liveRun} />}
       </main>

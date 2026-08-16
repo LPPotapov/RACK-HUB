@@ -173,8 +173,15 @@ const BracketPlayerRow = ({ slot, expectedPct, score, isWinner, done, showSeed }
         GBR {Math.round(slot.gbr)}{expectedPct != null && ` · ${Math.round(expectedPct)}%`}
       </span>
     </div>
+    {/* Score color pass: unconfirmed (!done, whether a live draft or the "–"
+        placeholder) is WHITE (text-canaletto-cream) — not the very faint
+        lavender/40 this used before, which read as invisible/disabled rather
+        than "live". Confirmed stays ORANGE for the winner (done's existing
+        winner-highlight scheme, untouched); the confirmed loser's own
+        cream/70 dim/struck styling is likewise untouched — that distinction
+        is the pre-existing win/loss highlight, not what this pass changes. */}
     <div className={`shrink-0 font-condensed text-lg font-black leading-none tabular-nums ${
-      isWinner ? 'text-canaletto-gold' : done ? 'text-canaletto-cream/70' : 'text-canaletto-lavender/40'
+      isWinner ? 'text-canaletto-gold' : done ? 'text-canaletto-cream/70' : 'text-canaletto-cream'
     }`}>
       {score}
     </div>

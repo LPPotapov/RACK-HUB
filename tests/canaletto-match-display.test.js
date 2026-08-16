@@ -8,7 +8,7 @@ import {
   startBlock
 } from '../src/application/canalettoEvent.js';
 import { expectedScore } from '../src/domain/fixedRackBbs.js';
-import { frozenMatchDisplay } from '../src/canaletto/matchDisplay.js';
+import { frozenMatchDisplay, matchScoreDisplay } from '../src/canaletto/matchDisplay.js';
 
 test('frozenMatchDisplay reads the pairing-time snapshot directly off the match (p1.elo/p2.elo)', () => {
   const config = { d: 330 };
@@ -96,4 +96,50 @@ test('a correction to an earlier round does not change an already-generated late
   const storedRound2Match = event.blockA.tournament.rounds[2].find((m) => m.id === round2Match.id);
   const after = frozenMatchDisplay(storedRound2Match, config);
   assert.deepEqual(after, before);
+});
+
+// ---------------------------------------------------------------------------
+// matchScoreDisplay (All Rounds / Livescore UI polish pass) — the shared
+// precedence + color-state decision behind ui.jsx's MatchSummaryCard,
+// consumed by BOTH the director's own All Rounds view (BlockPage.jsx) and
+// the public Livescore page's All Rounds view (LivescorePage.jsx). Pure —
+// no event/store access, so "no official state mutation" is true by
+// construction (nothing here is even capable of writing anything).
+// ---------------------------------------------------------------------------
+
+test('matchScoreDisplay: an unfinished match with a live draft shows the draft score, unconfirmed', () => {
+  const match = { done: false, r1: 0, r2: 0 };
+  const result = matchScoreDisplay(match, { r1: 4, r2: 3 });
+  assert.equal(result.text, '4 : 3');
+  assert.equal(result.confirmed, false);
+});
+
+test('matchScoreDisplay: an unfinished match with NO draft falls back to the "vs" placeholder, unconfirmed', () => {
+  const match = { done: false, r1: 0, r2: 0 };
+  assert.deepEqual(matchScoreDisplay(match, null), { text: 'vs', confirmed: false });
+  assert.deepEqual(matchScoreDisplay(match, undefined), { text: 'vs', confirmed: false });
+});
+
+test('matchScoreDisplay: a completed match ALWAYS shows the official score, confirmed — even with a draft present', () => {
+  const match = { done: true, r1: 7, r2: 5 };
+  const result = matchScoreDisplay(match, { r1: 4, r2: 3 });
+  assert.equal(result.text, '7 : 5');
+  assert.equal(result.confirmed, true);
+});
+
+// The exact semantics the bug report called out explicitly: color is
+// match.done alone, never "whether a draft object happens to be present" —
+// a stale draft that was never cleared must never make a COMPLETED match
+// read as unconfirmed/white.
+test('matchScoreDisplay: a STALE draft left over after Confirm never overrides the official score or its confirmed color', () => {
+  const match = { done: true, r1: 7, r2: 5 };
+  const staleDraft = { r1: 6, r2: 5 }; // e.g. one step before the final 7-5
+  const result = matchScoreDisplay(match, staleDraft);
+  assert.equal(result.text, '7 : 5');
+  assert.equal(result.confirmed, true);
+});
+
+test('matchScoreDisplay: an unfinished 0-0 (no draft yet touched) is unconfirmed/white, not confirmed', () => {
+  const match = { done: false, r1: 0, r2: 0 };
+  assert.equal(matchScoreDisplay(match, null).confirmed, false);
 });
