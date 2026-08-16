@@ -187,6 +187,29 @@ test('derivePublicState defaults liveDraftScores to {} when liveState is null/om
   assert.deepEqual(derivePublicState(event, null).liveDraftScores, {});
 });
 
+// Urgent live-draft-scoring bugfix pass, item 11 — the exact property
+// useCanalettoCloudMirror.js's fast-path effect relies on: a draft score
+// change must produce a DIFFERENT publicState payload even when `event`
+// itself is the SAME, unmutated reference (a draft change never touches
+// `event` at all — see canalettoLive.js). If derivePublicState's output
+// only ever varied with `event`, the mirror's `[liveState, ...]`-keyed
+// effect would be pointless — this proves the payload genuinely depends on
+// `liveState` independent of `event`.
+test('derivePublicState produces a DIFFERENT payload for the SAME event reference when only liveState changes (proves publicState is not gated on event changing)', () => {
+  const event = richEvent();
+  const unfinished = event.ko.top16.matches.find((m) => !m.done);
+  const pointer = { source: 'ko', stage: 'top16', matchNumber: unfinished.matchNumber };
+
+  const before = derivePublicState(event, createCanalettoLiveState());
+  const liveStateWithDraft = setLiveDraftScore(createCanalettoLiveState(), pointer, { r1: 5, r2: 4 });
+  const after = derivePublicState(event, liveStateWithDraft);
+
+  assert.notDeepEqual(before.liveDraftScores, after.liveDraftScores);
+  assert.equal(getLiveDraftScore(after, pointer).r1, 5);
+  // Same event reference both times — the official match itself never changed.
+  assert.deepEqual(before.ko.top16.matches, after.ko.top16.matches);
+});
+
 test('public bracket projection prefers the live draft for an unfinished Top16 match', () => {
   const event = richEvent();
   const unfinished = event.ko.top16.matches.find((m) => !m.done);

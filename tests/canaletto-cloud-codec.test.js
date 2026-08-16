@@ -20,7 +20,15 @@ import {
   updateTop16SeedOrder,
   validateCanalettoEvent
 } from '../src/application/canalettoEvent.js';
-import { createCanalettoLiveState, getTvSelectableMatches, resolveTvMatch, selectTvMatch } from '../src/application/canalettoLive.js';
+import {
+  createCanalettoLiveState,
+  getLiveDraftScore,
+  getTvSelectableMatches,
+  resolveTvMatch,
+  selectTvMatch,
+  setLiveDraftScore,
+  tvMatchKey
+} from '../src/application/canalettoLive.js';
 import { derivePublicState, validatePublicState } from '../src/application/canalettoPublicState.js';
 import {
   decodeEventFromCloud,
@@ -271,6 +279,69 @@ test('a reduced publicState, even after surviving the round trip, still fails th
   const publicState = derivePublicState(event, null);
   const roundTripped = publicCloudRoundTrip(publicState);
   assert.equal(validateCanalettoEvent(roundTripped).valid, false);
+});
+
+// ---------------------------------------------------------------------------
+// liveDraftScores (urgent live-draft-scoring bugfix pass, item 7) — must
+// survive the SAME simulated RTDB corruption behaviors as everything else
+// in publicState, and the match key produced when WRITING a draft
+// (setLiveDraftScore, on the director's local/authoritative match) must be
+// byte-for-byte identical to the key used when READING it back
+// (getLiveDraftScore, against the round-tripped/public match) — a Block
+// match's numeric-looking `matchId` is exactly the case that could tempt
+// RTDB's "all-numeric-keys become an array" reinterpretation if the key
+// were EVER just the bare id instead of the prefixed "block:A:1:<id>"
+// string tvMatchKey() always produces.
+// ---------------------------------------------------------------------------
+
+test('liveDraftScores (KO match) survives the publicState cloud round trip with an unchanged, findable key', () => {
+  const event = richEvent();
+  const unfinished = event.ko.top16.matches.find((m) => !m.done);
+  const pointer = { source: 'ko', stage: 'top16', matchNumber: unfinished.matchNumber };
+  let liveState = createCanalettoLiveState();
+  liveState = setLiveDraftScore(liveState, pointer, { r1: 4, r2: 3 });
+  const keyBeforeRoundTrip = Object.keys(liveState.liveDraftScores)[0];
+
+  const publicState = publicCloudRoundTrip(derivePublicState(event, liveState));
+  const keyAfterRoundTrip = Object.keys(publicState.liveDraftScores)[0];
+
+  assert.equal(keyBeforeRoundTrip, keyAfterRoundTrip);
+  assert.equal(keyAfterRoundTrip, `ko:top16:${unfinished.matchNumber}`);
+  assert.deepEqual(getLiveDraftScore(publicState, pointer), { r1: 4, r2: 3, updatedAt: liveState.liveDraftScores[keyBeforeRoundTrip].updatedAt });
+});
+
+test('liveDraftScores (Block match, numeric-looking matchId) survives the round trip — the key is never the bare numeric id, so it can never be mistaken for an RTDB array index', () => {
+  const event = richEvent();
+  const blockMatch = event.blockA.tournament.rounds[1].find((m) => !m.bye);
+  const pointer = { source: 'block', block: 'A', roundNumber: 1, matchId: blockMatch.id };
+  let liveState = createCanalettoLiveState();
+  liveState = setLiveDraftScore(liveState, pointer, { r1: 5, r2: 2 });
+  const key = Object.keys(liveState.liveDraftScores)[0];
+  assert.equal(key, `block:A:1:${blockMatch.id}`);
+  assert.equal(/^\d+$/.test(key), false); // never a bare numeric string — never RTDB-array-reinterpretable
+
+  const publicState = publicCloudRoundTrip(derivePublicState(event, liveState));
+  assert.deepEqual(Object.keys(publicState.liveDraftScores), [key]);
+  assert.equal(getLiveDraftScore(publicState, pointer).r1, 5);
+});
+
+test('a match key produced on the director\'s local/authoritative match is IDENTICAL to the key looked up against the round-tripped public match, for every source type', () => {
+  const event = richEvent();
+  const publicState = publicCloudRoundTrip(derivePublicState(event, null));
+
+  const koMatch = event.ko.top16.matches.find((m) => !m.done);
+  const publicKoMatch = publicState.ko.top16.matches.find((m) => m.matchNumber === koMatch.matchNumber);
+  assert.equal(
+    tvMatchKey({ source: 'ko', stage: 'top16', matchNumber: koMatch.matchNumber }),
+    tvMatchKey({ source: 'ko', stage: 'top16', matchNumber: publicKoMatch.matchNumber })
+  );
+
+  const blockMatch = event.blockB.tournament.rounds[1].find((m) => !m.bye);
+  const publicBlockMatch = publicState.blockB.tournament.rounds[1].find((m) => m.id === blockMatch.id);
+  assert.equal(
+    tvMatchKey({ source: 'block', block: 'B', roundNumber: 1, matchId: blockMatch.id }),
+    tvMatchKey({ source: 'block', block: 'B', roundNumber: 1, matchId: publicBlockMatch.id })
+  );
 });
 
 test('table labels survive the full cloud round trip, both at the event level and on individual matches', () => {
