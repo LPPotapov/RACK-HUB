@@ -181,6 +181,7 @@ const StageOperationPanel = ({ event, run, stage, gbrConfig, liveRun }) => {
             gbrConfig={gbrConfig}
             run={run}
             stage={stage}
+            liveRun={liveRun}
           />
         </>
       )}

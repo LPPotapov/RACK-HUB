@@ -21,13 +21,14 @@ import {
   getBlockResultsRows,
   getBlockStatus,
   getBracketProjection,
+  getKoChampion,
   getRoundStandings,
   getTop16Status,
   isRoundTablesConfirmed
 } from '../../application/canalettoEvent.js';
 import { getLiveDraftScore } from '../../application/canalettoLive.js';
 import { frozenMatchDisplay } from '../matchDisplay.js';
-import { BracketOverview } from '../koUi.jsx';
+import { BracketOverview, ChampionBanner } from '../koUi.jsx';
 import { MatchSummaryCard, PageHeader, Panel, SectionHeader, StatusBadge } from '../ui.jsx';
 import { LiveBrandMark, TwoColumnStandings } from './liveComponents.jsx';
 import { EMPTY_PUBLIC_STATE, useCloudPublicEvent } from './useCloudPublicEvent.js';
@@ -225,10 +226,20 @@ const Top16Section = ({ event }) => {
   const status = getTop16Status(event);
   const projection = getBracketProjection(event);
   const gbrConfig = event.blockA.tournament.config;
+  // Reuses the SAME authoritative champion derivation the director's
+  // Top16Page.jsx uses (getKoChampion() only ever reads event.ko.final,
+  // already whitelisted into publicState as-is — see
+  // canalettoPublicState.js) — never a second/looser "close enough" check.
+  // getKoChampion() returns null until event.ko.final's matches are ALL
+  // match.done, so an unfinished Final's live draft (however close to the
+  // race target) can never produce a champion here, exactly like the
+  // director page.
+  const champion = getKoChampion(event);
 
   return (
     <div>
       <PageHeader eyebrow="Knockout" title="Top 16" right={<StatusBadge status={status} />} />
+      <ChampionBanner champion={champion} />
       <BracketOverview projection={projection} ko={event.ko} schedule={event.schedule} gbrConfig={gbrConfig} liveDraftScores={event.liveDraftScores} />
     </div>
   );
