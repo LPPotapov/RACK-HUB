@@ -30,7 +30,7 @@ import { getLiveDraftScore } from '../../application/canalettoLive.js';
 import { frozenMatchDisplay } from '../matchDisplay.js';
 import { BracketOverview, ChampionBanner, MobileKoStageView } from '../koUi.jsx';
 import { MatchSummaryCard, PageHeader, Panel, SectionHeader, StatusBadge } from '../ui.jsx';
-import { isCanalettoPublicDomain } from '../publicDomain.js';
+import { CANALETTO_PUBLIC_EVENT_TITLE, isCanalettoPublicDomain } from '../publicDomain.js';
 import { LiveBrandMark, TwoColumnStandings } from './liveComponents.jsx';
 import { EMPTY_PUBLIC_STATE, useCloudPublicEvent } from './useCloudPublicEvent.js';
 
@@ -142,13 +142,16 @@ const PublicPlayersColumn = ({ event, block }) => {
 // same gold-border/condensed-type language as koUi.jsx's ChampionBanner;
 // venue/date come from the same event.settings fields EventPage.jsx's own
 // subtitle already reads, left out entirely when unset rather than
-// inventing placeholder text.
+// inventing placeholder text. The primary title itself is the fixed
+// CANALETTO_PUBLIC_EVENT_TITLE constant, not event.settings.title —
+// production's Firebase data only has "Canaletto Cup" (no year), and this
+// banner is a presentation-layer label, not a mirror of tournament data.
 const PublicEventBanner = ({ event }) => {
   const subtitle = [event.settings.venue, event.settings.date].filter(Boolean).join(' · ');
   return (
     <div className="mb-6 rounded border-2 border-canaletto-gold bg-canaletto-gold/10 px-4 py-5 text-center sm:px-6">
       <h1 className="break-words font-condensed text-3xl font-black uppercase leading-tight tracking-tight text-canaletto-gold sm:text-5xl lg:text-6xl">
-        {event.settings.title || 'Canaletto'}
+        {CANALETTO_PUBLIC_EVENT_TITLE}
       </h1>
       {subtitle && (
         <div className="mt-2 text-xs font-bold uppercase tracking-widest text-canaletto-lavender sm:text-sm">{subtitle}</div>

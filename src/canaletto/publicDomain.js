@@ -6,3 +6,9 @@
 export const CANALETTO_PUBLIC_HOSTNAME = 'canaletto.bc-joes.de';
 
 export const isCanalettoPublicDomain = () => window.location.hostname === CANALETTO_PUBLIC_HOSTNAME;
+
+// Fixed public-archive label for this hostname — presentation-layer only.
+// Production's event.settings.title is just "Canaletto Cup" (no year);
+// rather than touch Firebase data, the public banner and tab title both
+// read this constant instead, so they can't drift apart from each other.
+export const CANALETTO_PUBLIC_EVENT_TITLE = 'Canaletto Cup 2026';

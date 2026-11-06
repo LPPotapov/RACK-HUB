@@ -2,7 +2,7 @@ import CanalettoApp from './canaletto/CanalettoApp.jsx';
 import PoolTournamentApp from './PoolTournamentApp.jsx';
 import { CanalettoLiveRouter } from './canaletto/live/CanalettoLiveRouter.jsx';
 import { DirectorAuthGate } from './canaletto/DirectorAuthGate.jsx';
-import { isCanalettoPublicDomain } from './canaletto/publicDomain.js';
+import { CANALETTO_PUBLIC_EVENT_TITLE, isCanalettoPublicDomain } from './canaletto/publicDomain.js';
 
 function App() {
   const params = new URLSearchParams(window.location.search);
@@ -23,7 +23,7 @@ function App() {
   // hostname check above resolves `liveView` before anything director-side
   // is reachable.
   if (liveView) {
-    if (onCanalettoPublicDomain) document.title = 'CANALETTO CUP 2026';
+    if (onCanalettoPublicDomain) document.title = CANALETTO_PUBLIC_EVENT_TITLE.toUpperCase();
     return <CanalettoLiveRouter view={liveView} params={params} />;
   }
   const isLegacy = params.get('legacy') === '1';
