@@ -30,6 +30,7 @@ import { getLiveDraftScore } from '../../application/canalettoLive.js';
 import { frozenMatchDisplay } from '../matchDisplay.js';
 import { BracketOverview, ChampionBanner, MobileKoStageView } from '../koUi.jsx';
 import { MatchSummaryCard, PageHeader, Panel, SectionHeader, StatusBadge } from '../ui.jsx';
+import { isCanalettoPublicDomain } from '../publicDomain.js';
 import { LiveBrandMark, TwoColumnStandings } from './liveComponents.jsx';
 import { EMPTY_PUBLIC_STATE, useCloudPublicEvent } from './useCloudPublicEvent.js';
 
@@ -131,8 +132,34 @@ const PublicPlayersColumn = ({ event, block }) => {
   );
 };
 
+// Large event-identity banner for the public custom domain's PLAYERS
+// landing page (canaletto.bc-joes.de root) — the archive-task requirement
+// that a viewer landing cold on the page immediately know what event
+// they're looking at, since the browser-tab title and ChampionBanner's
+// small eyebrow text aren't prominent enough on their own. Gated by
+// isCanalettoPublicDomain() so rack-hub-canaletto.web.app (director host,
+// including its own `?live=livescore` access) never shows it. Reuses the
+// same gold-border/condensed-type language as koUi.jsx's ChampionBanner;
+// venue/date come from the same event.settings fields EventPage.jsx's own
+// subtitle already reads, left out entirely when unset rather than
+// inventing placeholder text.
+const PublicEventBanner = ({ event }) => {
+  const subtitle = [event.settings.venue, event.settings.date].filter(Boolean).join(' · ');
+  return (
+    <div className="mb-6 rounded border-2 border-canaletto-gold bg-canaletto-gold/10 px-4 py-5 text-center sm:px-6">
+      <h1 className="break-words font-condensed text-3xl font-black uppercase leading-tight tracking-tight text-canaletto-gold sm:text-5xl lg:text-6xl">
+        {event.settings.title || 'Canaletto'}
+      </h1>
+      {subtitle && (
+        <div className="mt-2 text-xs font-bold uppercase tracking-widest text-canaletto-lavender sm:text-sm">{subtitle}</div>
+      )}
+    </div>
+  );
+};
+
 const PlayersSection = ({ event }) => (
   <div>
+    {isCanalettoPublicDomain() && <PublicEventBanner event={event} />}
     <PageHeader eyebrow="Roster" title="Players" subtitle="Block A and Block B — starting field and Start GBR." />
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <PublicPlayersColumn event={event} block="A" />
