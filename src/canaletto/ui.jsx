@@ -157,7 +157,12 @@ export const PlayerBlock = ({ name, gbr, winPct, align }) => {
   const dot = gbr != null && winPct != null && <span> · </span>;
   return (
     <div className={align === 'right' ? 'min-w-0 text-right' : 'min-w-0 text-left'}>
-      <div className="truncate font-semibold text-canaletto-cream">{name}</div>
+      {/* Never ellipsis-truncate a player name (long-name wrap fix) — wraps
+          at word boundaries onto a second line instead; the surrounding
+          grid/flex row (MatchRow/MatchSummaryCard/KoMatchCard) already
+          grows to fit via `items-center`, so a two-line name never pushes
+          the score out of the card. */}
+      <div className="whitespace-normal break-words font-semibold leading-tight text-canaletto-cream">{name}</div>
       <div className="truncate text-xs text-canaletto-lavender">
         {align === 'right' ? (
           <>{winPctPart}{dot}{gbrPart}</>
@@ -188,11 +193,11 @@ const MissingCard = ({ match, disabled, onUndoMissing }) => {
       </div>
       <div className="grid grid-cols-2 items-center gap-2 text-sm">
         <div>
-          <div className="truncate font-semibold text-canaletto-lavender line-through">{missingPlayer.name}</div>
+          <div className="whitespace-normal break-words font-semibold leading-tight text-canaletto-lavender line-through">{missingPlayer.name}</div>
           <div className="text-[10px] font-bold uppercase text-canaletto-magenta">Missing</div>
         </div>
         <div className="text-right">
-          <div className="truncate font-semibold text-canaletto-cream">{opponent.name}</div>
+          <div className="whitespace-normal break-words font-semibold leading-tight text-canaletto-cream">{opponent.name}</div>
           <div className="text-[10px] font-bold uppercase text-canaletto-gold">Bye · +1 MP</div>
         </div>
       </div>
@@ -462,11 +467,11 @@ export const MatchSummaryCard = ({ match, tablesConfirmed, p1Gbr, p2Gbr, p1WinPc
         <div className="rounded border border-canaletto-magenta/40 bg-canaletto-panel2 p-2">
           <div className="grid grid-cols-2 items-center gap-2 text-sm">
             <div>
-              <div className="truncate font-semibold text-canaletto-lavender line-through">{missingPlayer.name}</div>
+              <div className="whitespace-normal break-words font-semibold leading-tight text-canaletto-lavender line-through">{missingPlayer.name}</div>
               <div className="text-[10px] font-bold uppercase text-canaletto-magenta">Missing</div>
             </div>
             <div className="text-right">
-              <div className="truncate font-semibold text-canaletto-cream">{opponent.name}</div>
+              <div className="whitespace-normal break-words font-semibold leading-tight text-canaletto-cream">{opponent.name}</div>
               <div className="text-[10px] font-bold uppercase text-canaletto-gold">Bye · +1 MP</div>
             </div>
           </div>

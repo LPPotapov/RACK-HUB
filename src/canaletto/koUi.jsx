@@ -164,7 +164,11 @@ const BracketPlayerRow = ({ slot, expectedPct, score, isWinner, done, showSeed }
   <div className="flex items-center justify-between gap-2 leading-tight">
     <div className="flex min-w-0 flex-1 items-baseline gap-1">
       {showSeed && <span className="shrink-0 font-condensed text-xs font-black text-canaletto-lavender">{slot.seed}</span>}
-      <span className={`truncate text-sm font-semibold ${
+      {/* Long-name wrap fix: never ellipsis-truncate — `min-w-0` lets this
+          span actually shrink within the flex row (the seed/GBR badges stay
+          `shrink-0`), and removing `truncate`'s forced `whitespace-nowrap`
+          lets the browser wrap at word boundaries instead of overflowing. */}
+      <span className={`min-w-0 whitespace-normal break-words text-sm font-semibold ${
         isWinner ? 'text-canaletto-gold' : done ? 'text-canaletto-lavender/50 line-through' : 'text-canaletto-cream'
       }`}>
         {slot.name}
@@ -245,7 +249,7 @@ const BracketNode = ({ match, target, tablesConfirmed, gbrConfig, showSeed, stag
 // immediately. QF/SF/Final "WINNER Mx" labels never carry `seed` (showSeed
 // is false there), so they render unchanged.
 const BracketProjectedRow = ({ participant, showSeed }) => (
-  <div className="truncate text-sm leading-tight">
+  <div className="break-words text-sm leading-tight">
     {participant.known ? (
       <>
         {showSeed && <><span className="font-condensed text-xs font-black text-canaletto-lavender">{participant.seed}</span>{' '}</>}
