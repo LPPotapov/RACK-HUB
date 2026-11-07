@@ -199,8 +199,8 @@ test('Top16Page.jsx: every <MatchGrid> render (Top16 slots AND the QF/SF/Final b
   });
 });
 
-test('LivescorePage.jsx: Top16 section derives champion via getKoChampion() and renders the shared ChampionBanner — no separate champion logic', () => {
-  const source = readFileSync(path.join(__dirname, '../src/canaletto/live/LivescorePage.jsx'), 'utf8');
+test('LivescorePresentation.jsx: Top16 section derives champion via getKoChampion() and renders the shared ChampionBanner — no separate champion logic', () => {
+  const source = readFileSync(path.join(__dirname, '../src/canaletto/live/LivescorePresentation.jsx'), 'utf8');
   assert.ok(source.includes("getKoChampion"), 'must reuse the authoritative getKoChampion() derivation');
   assert.ok(source.includes('ChampionBanner'), 'must reuse the shared ChampionBanner component');
   assert.ok(/<ChampionBanner\s+champion=\{champion\}\s*\/>/.test(source), 'must render <ChampionBanner champion={champion} />');

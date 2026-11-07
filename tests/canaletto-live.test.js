@@ -672,10 +672,14 @@ const FORBIDDEN_IN_PUBLIC_PAGES = [
 
 const PUBLIC_PAGE_FILES = [
   'LivescorePage.jsx',
+  'LivescorePresentation.jsx',
   'Top12OverlayPage.jsx',
   'BlockResultsOverlayPage.jsx',
   'BracketOverlayPage.jsx',
-  'TvOverlayPage.jsx'
+  'TvOverlayPage.jsx',
+  'CanalettoArchive2026Page.jsx',
+  'CanalettoLandingPage.jsx',
+  'CanalettoLiveEntry.jsx'
 ];
 
 test('public/OBS LIVE pages never import a director-mutation command or director-only editor component', () => {
