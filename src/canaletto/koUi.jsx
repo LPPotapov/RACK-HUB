@@ -11,7 +11,7 @@ import { expectedScore } from '../domain/fixedRackBbs.js';
 import { KO_RACE_TO, KO_TOP16_SLOT_SIZE, isValidKoScore } from '../application/canalettoKo.js';
 import { tvMatchKey as matchPointerKey } from '../application/canalettoLive.js';
 import { parseKoScoreField } from './koScoreEntry.js';
-import { publishDraftScoreChange } from './scoreEntry.js';
+import { publishDraftScoreChange, seedScoreField } from './scoreEntry.js';
 import { formatScheduleRange } from './schedule.js';
 import { ActionButton, PlayerBlock, formatDelta } from './ui.jsx';
 
@@ -27,19 +27,26 @@ import { ActionButton, PlayerBlock, formatDelta } from './ui.jsx';
 // publish a draft — see ui.jsx's MatchRow comment for the full rationale,
 // shared verbatim here). `onDraftClear` fires once, best-effort, right
 // after a SUCCESSFUL Complete/Save.
+// `draftScore` (draft-remount fix, optional, same contract/rationale as
+// ui.jsx's MatchRow's own `draftScore` prop, shared verbatim here): seeds
+// the input on mount/remount so an in-progress, unconfirmed race-to score
+// survives the director switching Top16/QF/SF/Final stages and back.
 export const KoMatchCard = ({
   match, target, disabled, onTableChange, onSubmit,
   tableOptions = [], tableFrozen = false, p1Gbr, p2Gbr, p1WinPct, p2WinPct,
-  onDraftChange, onDraftClear
+  onDraftChange, onDraftClear, draftScore
 }) => {
-  const [r1, setR1] = useState(match.done ? String(match.r1) : '');
-  const [r2, setR2] = useState(match.done ? String(match.r2) : '');
+  const draftScoreRef = useRef(draftScore);
+  draftScoreRef.current = draftScore;
+  const [r1, setR1] = useState(seedScoreField(match.done, match.r1, draftScore?.r1));
+  const [r2, setR2] = useState(seedScoreField(match.done, match.r2, draftScore?.r2));
   const [editing, setEditing] = useState(!match.done);
   const lastPublishedDraftRef = useRef(null);
 
   useEffect(() => {
-    setR1(match.done ? String(match.r1) : '');
-    setR2(match.done ? String(match.r2) : '');
+    const draft = draftScoreRef.current;
+    setR1(seedScoreField(match.done, match.r1, draft?.r1));
+    setR2(seedScoreField(match.done, match.r2, draft?.r2));
     setEditing(!match.done);
     lastPublishedDraftRef.current = null;
   }, [match.matchNumber, match.done, match.r1, match.r2]);

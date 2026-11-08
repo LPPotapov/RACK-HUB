@@ -239,6 +239,15 @@ test('App.jsx\'s eager graph is non-trivial and really does include the archive/
 // have no event-namespace concept whatsoever, Firebase-backed or not.
 // ---------------------------------------------------------------------------
 
+test('TvScoreControlPage.jsx and TvOverlayPage.jsx both read/write live state through the SAME useCloudLiveState() hook — never a second/independent live-namespace resolution', () => {
+  const controlSource = readFileSync(path.join(__dirname, '../src/canaletto/live/TvScoreControlPage.jsx'), 'utf8');
+  const overlaySource = readFileSync(path.join(__dirname, '../src/canaletto/live/TvOverlayPage.jsx'), 'utf8');
+  [controlSource, overlaySource].forEach((source) => {
+    assert.ok(importSpecifiers(source).some((spec) => spec.includes('useCloudLiveState')), 'must import useCloudLiveState.js');
+    assert.ok(!/events\/canaletto(2026|Test)/.test(source), 'must never hardcode a literal events/canaletto2026 or events/canalettoTest path');
+  });
+});
+
 test('the archive and landing pages never reference the event-namespace selector mechanism at all', () => {
   const archiveSource = readFileSync(path.join(__dirname, '../src/canaletto/live/CanalettoArchive2026Page.jsx'), 'utf8');
   const landingSource = readFileSync(path.join(__dirname, '../src/canaletto/live/CanalettoLandingPage.jsx'), 'utf8');

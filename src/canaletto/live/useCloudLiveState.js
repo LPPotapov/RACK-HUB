@@ -1,7 +1,22 @@
 // Cross-machine TV/broadcast state (Canaletto Cup 2026 cloud sync pass) —
-// subscribes to (and, for an authorized signed-in user, writes)
-// `/events/canaletto2026/live`. Same `{ liveState, run }` shape as the
+// subscribes to (and, for an authorized signed-in user, writes) `LIVE_PATH`
+// (canalettoCloudSync.js) — `events/<active event namespace>/live`, the
+// SAME workspace/test/historical selection every other cloud consumer uses
+// (see canalettoCloudPaths.js's resolveEventSelector()); this hook has no
+// namespace logic of its own. Same `{ liveState, run }` shape as the
 // existing local useCanalettoLiveState.js so callers use it identically.
+//
+// NOTE — this `live` write path is intentionally NOT gated by the main
+// event's publish/syncMode machinery (useCanalettoCloudMirror.js): a
+// director or stream operator can select a TV match and write to `live`
+// at any time once signed in, independent of whether "Publish Current to
+// Cloud" has ever been clicked for the main tournament. That means `live`
+// can hold a real tvMatch pointer while `publicState` is still genuinely
+// empty — resolveTvMatch() (canalettoLive.js) then has nothing to resolve
+// that pointer against, so the TV/match overlay correctly renders empty.
+// This is NOT a bug in this hook; it is the expected consequence of an
+// unpublished workspace (see docs task "WORKSPACE NOT RECEIVING DIRECTOR
+// STATE").
 //
 // Read-only use: TvOverlayPage.jsx (public OBS ticker — no auth, just
 // ignores `run`/`canWrite`).

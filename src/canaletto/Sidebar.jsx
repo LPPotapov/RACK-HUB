@@ -49,6 +49,30 @@ export const Sidebar = ({ event, page, onNavigate, cloudAuth }) => (
       </div>
     )}
 
+    {/* Always-visible, impossible-to-miss sync status (urgent director-
+        cloud fix — "make sure the UI clearly identifies that the director
+        is LOCAL ONLY / WORKSPACE NOT PUBLISHED"). CloudSyncPanel's own
+        "Cloud Empty" messaging already explains this correctly, but it's
+        INSIDE a collapsed panel the director has to click open on
+        EventPage.jsx — a director who never opens it had no way to tell,
+        from any OTHER page, whether OBS/live links are actually seeing
+        their current tournament. Mirrors the IS_TEST_EVENT banner's
+        "impossible to miss" placement directly above. Only rendered once
+        actually signed in as an authorized director — before that there
+        is no cloud involvement to report at all, same as before this
+        fix. */}
+    {cloudAuth?.user && cloudAuth.isDirector && (
+      <div
+        className={`border-b px-4 py-1.5 text-center font-condensed text-xs font-black uppercase tracking-widest ${
+          cloudAuth.syncMode === 'active'
+            ? 'border-canaletto-gold bg-canaletto-gold text-black'
+            : 'border-canaletto-magenta bg-canaletto-magenta text-white'
+        }`}
+      >
+        {cloudAuth.syncMode === 'active' ? 'Live — Syncing To Cloud' : 'Local Only — Not Published'}
+      </div>
+    )}
+
     <nav className="flex-1 py-3">
       {NAV_ITEMS.map((item) => {
         const status = statusForNav(event, item.id);

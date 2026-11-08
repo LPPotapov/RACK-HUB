@@ -45,7 +45,7 @@ const TwoColumnStandings = ({ rows, qualificationThreshold }) => {
   );
 };
 
-const RoundView = ({ event, run, block, roundNumber, onAdvanced, liveRun }) => {
+const RoundView = ({ event, run, block, roundNumber, onAdvanced, liveRun, liveState }) => {
   const tournament = event[`block${block}`].tournament;
   const matches = tournament.rounds[roundNumber] || [];
   const locked = !!event[`block${block}Lock`];
@@ -129,6 +129,7 @@ const RoundView = ({ event, run, block, roundNumber, onAdvanced, liveRun }) => {
             onUndoMissing={canManageCurrentRound ? () => run(undoBlockPlayerMissing, block, { matchId: m.id }) : undefined}
             onDraftChange={liveRun ? (r1, r2) => liveRun(setLiveDraftScore, { source: 'block', block, roundNumber, matchId: m.id }, { r1, r2 }) : undefined}
             onDraftClear={liveRun ? () => liveRun(clearLiveDraftScore, { source: 'block', block, roundNumber, matchId: m.id }) : undefined}
+            draftScore={!m.bye && !m.done && liveState ? getLiveDraftScore(liveState, { source: 'block', block, roundNumber, matchId: m.id }) : null}
             {...(!m.bye ? frozenMatchDisplay(m, tournament.config) : {})}
           />
         ))}
@@ -358,7 +359,7 @@ export const BlockPage = ({ event, run, block, liveState, liveRun }) => {
       </div>
 
       {subView === 'round' && (
-        <RoundView event={event} run={run} block={block} roundNumber={viewingRound} onAdvanced={setViewingRound} liveRun={liveRun} />
+        <RoundView event={event} run={run} block={block} roundNumber={viewingRound} onAdvanced={setViewingRound} liveRun={liveRun} liveState={liveState} />
       )}
       {subView === 'all' && <AllRoundsView event={event} block={block} liveState={liveState} />}
       {subView === 'results' && <ResultsView event={event} run={run} block={block} />}

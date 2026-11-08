@@ -5,7 +5,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { matchScoreDisplay } from './matchDisplay.js';
-import { publishDraftScoreChange, resolveScoreField } from './scoreEntry.js';
+import { publishDraftScoreChange, resolveScoreField, seedScoreField } from './scoreEntry.js';
 
 // Narrow-viewport pass (public Livescore responsive work): below `sm`
 // (640px), a long `right` badge (e.g. StatusBadge's "WAITING FOR BLOCKS")
@@ -309,15 +309,32 @@ const MissingTrigger = ({ match, roundNumber, onMarkMissing }) => {
 // (this is a deliberate, documented scope choice — see the livescore
 // hotfix report). `onDraftClear` is called once, best-effort, right after a
 // SUCCESSFUL Confirm/Save — see submit() below.
-export const MatchRow = ({ match, disabled, onTableChange, onSubmit, onMarkMissing, onUndoMissing, roundNumber, tableOptions = [], tableFrozen = false, p1Gbr, p2Gbr, p1WinPct, p2WinPct, onDraftChange, onDraftClear }) => {
-  const [r1, setR1] = useState(match.done ? String(match.r1) : '');
-  const [r2, setR2] = useState(match.done ? String(match.r2) : '');
+// `draftScore` (draft-remount fix, optional): `{ r1, r2 }` or null/undefined
+// — the caller's own getLiveDraftScore() lookup for THIS match's pointer
+// (same contract MatchSummaryCard's own `draftScore` prop already has).
+// Seeds the input on mount/remount so an in-progress, unconfirmed score
+// survives the director switching tabs/sections and back — previously this
+// component could only WRITE a draft (onDraftChange) but never read one
+// back, so every remount reset to blank even though the draft was still
+// sitting in `liveState` the whole time. Read via a ref (`draftScoreRef`)
+// rather than listed in the effect's dependency array below: this must
+// seed from whatever draft exists at the moment `match.id`/`match.done`
+// actually changes (mount, switching to a different match, or
+// confirmation) — it must NOT re-fire on every draft tick while the
+// director is actively typing, which would fight the keystroke each
+// publishDraftScoreChange() round trip produces.
+export const MatchRow = ({ match, disabled, onTableChange, onSubmit, onMarkMissing, onUndoMissing, roundNumber, tableOptions = [], tableFrozen = false, p1Gbr, p2Gbr, p1WinPct, p2WinPct, onDraftChange, onDraftClear, draftScore }) => {
+  const draftScoreRef = useRef(draftScore);
+  draftScoreRef.current = draftScore;
+  const [r1, setR1] = useState(seedScoreField(match.done, match.r1, draftScore?.r1));
+  const [r2, setR2] = useState(seedScoreField(match.done, match.r2, draftScore?.r2));
   const [editing, setEditing] = useState(!match.done);
   const lastPublishedDraftRef = useRef(null);
 
   useEffect(() => {
-    setR1(match.done ? String(match.r1) : '');
-    setR2(match.done ? String(match.r2) : '');
+    const draft = draftScoreRef.current;
+    setR1(seedScoreField(match.done, match.r1, draft?.r1));
+    setR2(seedScoreField(match.done, match.r2, draft?.r2));
     setEditing(!match.done);
     lastPublishedDraftRef.current = null;
   }, [match.id, match.done, match.r1, match.r2]);

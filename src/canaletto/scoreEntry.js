@@ -16,6 +16,24 @@ export const resolveScoreField = (raw) => {
   return Number.isInteger(n) ? n : null;
 };
 
+// Seeds a score input's STRING value on mount/remount (draft-remount fix,
+// "WORKSPACE NOT RECEIVING DIRECTOR STATE + DRAFT SCORE REMOUNT BUG"): the
+// official result wins once the match is done; otherwise an existing
+// unconfirmed draft (from liveDraftScores) wins; otherwise blank. Shared by
+// MatchRow (ui.jsx) and KoMatchCard (koUi.jsx) so a director's in-progress,
+// unconfirmed score survives switching tabs/sections/stages and back —
+// previously both only ever seeded from the official value (blank until
+// done), silently discarding any draft already sitting in `liveState` the
+// moment the card remounted (a tab switch unmounts the whole round/stage
+// view, so a FRESH mount's `useState` initializer ran with no knowledge of
+// the draft at all). `draftValue` is one side (r1 or r2) of the caller's
+// own `getLiveDraftScore()` lookup, or null/undefined when none exists.
+export const seedScoreField = (done, officialValue, draftValue) => {
+  if (done) return String(officialValue);
+  if (draftValue != null) return String(draftValue);
+  return '';
+};
+
 // ---------------------------------------------------------------------------
 // LIVE DRAFT publishing (livescore hotfix, urgent bugfix pass) — separate
 // from the two parsers above on purpose, but NOW deliberately matching

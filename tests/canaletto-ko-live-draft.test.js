@@ -199,6 +199,15 @@ test('Top16Page.jsx: every <MatchGrid> render (Top16 slots AND the QF/SF/Final b
   });
 });
 
+test('Top16Page.jsx: every <MatchGrid> render also passes liveState through — regression guard for the draft-score REMOUNT bug (same class of missing-prop bug as liveRun above, now for reading a draft back rather than publishing one)', () => {
+  const source = readFileSync(path.join(__dirname, '../src/canaletto/pages/Top16Page.jsx'), 'utf8');
+  const matchGridCalls = source.match(/<MatchGrid\b[\s\S]*?\/>/g);
+  assert.ok(matchGridCalls && matchGridCalls.length >= 3, 'expected 3 <MatchGrid> render sites (Top16 Slot 1, Top16 Slot 2, QF/SF/Final)');
+  matchGridCalls.forEach((call, i) => {
+    assert.ok(/liveState=\{liveState\}/.test(call), `<MatchGrid> render site #${i + 1} must pass liveState={liveState}:\n${call}`);
+  });
+});
+
 test('LivescorePresentation.jsx: Top16 section derives champion via getKoChampion() and renders the shared ChampionBanner — no separate champion logic', () => {
   const source = readFileSync(path.join(__dirname, '../src/canaletto/live/LivescorePresentation.jsx'), 'utf8');
   assert.ok(source.includes("getKoChampion"), 'must reuse the authoritative getKoChampion() derivation');
