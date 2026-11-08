@@ -7,11 +7,13 @@
 // resolveTvMatch()'s NORMALIZED shape, identical whether the selected match
 // is a Block A/B Swiss match or a KO match (director correction pass —
 // "the ticker must work during Block A, Block B, Top16, QF, SF, Final").
-// The SCORE shown is deliberately NOT the official result but
-// getCurrentTvScore(liveState) — the independent, PER-MATCH broadcast score
-// settable from either the director's LIVE page or the streaming staff's TV
-// Overlay Score Control page. Score-only separation, not a second copy of
-// the match.
+// The SCORE shown is resolveTvDisplayScore(resolved, liveState) (TV/match
+// ticker score-source fix) — the OFFICIAL result once the match is
+// confirmed; otherwise the director's in-progress LIVE DRAFT; otherwise
+// the independent, PER-MATCH manual broadcast score settable from either
+// the director's LIVE page or the streaming staff's TV Overlay Score
+// Control page; otherwise 0-0. See resolveTvDisplayScore()'s own header
+// for the full precedence/rationale.
 //
 // LIVE/OBS correction pass — meta row redesign: the brand mark no longer
 // sits to one side of the whole ticker (that read as asymmetric); it is now
@@ -28,6 +30,12 @@
 // at that width. The panel is back to its original ~wide max-w-4xl/px-5,
 // keeping every other polish-pass change (height, meta-row layout, corner
 // radius) intact.
+//
+// TV/MATCH TICKER SCORE-SOURCE FIX: the score is now resolveTvDisplayScore()
+// (canalettoLive.js), not a bare getCurrentTvScore() call — official result
+// once confirmed, else the director's live draft, else the independent
+// manual broadcast score, else 0-0. See that function's own header for the
+// full precedence/rationale. Still DISPLAY ONLY: this page never writes.
 //
 // LIVE/OBS alignment fix — the meta row (source label / table) and the
 // player row used to be TWO SEPARATE grids. Even with matching
@@ -55,7 +63,7 @@
 // reduction: 6+6+2=14px before, 7+7+0=14px now. The player row now sits
 // right up against the meta row; the panel's outer edges haven't moved.
 
-import { getCurrentTvScore, resolveTvMatch } from '../../application/canalettoLive.js';
+import { resolveTvDisplayScore, resolveTvMatch } from '../../application/canalettoLive.js';
 import { LiveBrandMark } from './liveComponents.jsx';
 import { useCloudPublicEvent } from './useCloudPublicEvent.js';
 import { useCloudLiveState } from './useCloudLiveState.js';
@@ -78,7 +86,7 @@ export const TvOverlayPage = () => {
   if (!resolved) return <EmptyOverlay />;
 
   const { sourceLabel, tbl, p1, p2 } = resolved;
-  const score = getCurrentTvScore(liveState);
+  const score = resolveTvDisplayScore(resolved, liveState);
 
   return (
     <div className="flex min-h-screen items-end justify-center bg-transparent p-4">

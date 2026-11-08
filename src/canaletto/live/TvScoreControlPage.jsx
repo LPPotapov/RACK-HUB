@@ -31,6 +31,7 @@ import {
   getCurrentTvScore,
   getTvSelectableMatches,
   isSelectedTvRow,
+  resolveTvDisplayScore,
   resolveTvMatch,
   selectTvMatch,
   setTvScore
@@ -148,6 +149,8 @@ export const TvScoreControlPage = () => {
   const { liveState, run, canWrite, auth, loaded } = useCloudLiveState();
   const resolved = resolveTvMatch(event, liveState);
   const score = getCurrentTvScore(liveState);
+  const onAirScore = resolveTvDisplayScore(resolved, liveState);
+  const manualScoreIsOnAir = onAirScore.r1 === score.r1 && onAirScore.r2 === score.r2;
 
   if (!isFirebaseConfigured) return <CenteredStatus>Live Data Unavailable</CenteredStatus>;
   if (auth.loading) return <CenteredStatus>Auth Check…</CenteredStatus>;
@@ -211,6 +214,17 @@ export const TvScoreControlPage = () => {
                 <div className="mt-3 text-center text-xs text-canaletto-lavender">
                   This is the broadcast overlay score only, kept per match — it never reads from or writes to official tournament results.
                 </div>
+                {/* TV/match ticker score-source fix — official result and the
+                    director's in-progress draft now both take precedence
+                    over this manual override on the actual overlay, so the
+                    steppers above may not be what's currently on air. Shown
+                    with the SAME resolveTvDisplayScore() the overlay itself
+                    calls, so this is never a second/guessed precedence. */}
+                {!manualScoreIsOnAir && (
+                  <div className="mt-2 rounded border border-canaletto-gold/50 bg-canaletto-gold/10 px-3 py-2 text-center text-xs font-semibold text-canaletto-cream">
+                    On air right now: {onAirScore.r1} – {onAirScore.r2} ({resolved.done ? 'official result' : 'director draft'}) — your manual score above isn't shown until neither applies.
+                  </div>
+                )}
               </>
             )}
           </>

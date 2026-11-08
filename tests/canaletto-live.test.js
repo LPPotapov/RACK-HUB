@@ -395,7 +395,14 @@ test('resolveTvMatch returns null when the pointer references a matchNumber that
   assert.equal(resolveTvMatch(event, state), null);
 });
 
-test('resolveTvMatch never exposes a score field — the broadcast score is separate from the resolved official match', () => {
+// Updated for the TV/match ticker score-source fix: resolveTvMatch() now
+// DOES expose `done`/`r1`/`r2` (the match's OWN official fields — see
+// resolveTvDisplayScore()'s precedence), but these must never be confused
+// with the SEPARATE, independent manual `tvScores` broadcast override —
+// an unconfirmed match's own r1/r2 (always 0 before any official result)
+// must stay completely independent of whatever the streaming staff dialled
+// into tvScores for the same pointer.
+test('resolveTvMatch exposes the match\'s OWN official done/r1/r2 fields, which stay independent of the separate manual tvScores broadcast override', () => {
   const event = eventWithTop16Started();
   const match = event.ko.top16.matches[0];
   const state = setTvScore(
@@ -404,8 +411,8 @@ test('resolveTvMatch never exposes a score field — the broadcast score is sepa
   );
   const resolved = resolveTvMatch(event, state);
   assert.equal(resolved.p1.name, match.p1.name);
-  assert.equal('r1' in resolved, false);
-  assert.equal('r2' in resolved, false);
+  assert.equal(resolved.done, false);
+  assert.notDeepEqual({ r1: resolved.r1, r2: resolved.r2 }, { r1: 3, r2: 1 }, 'the match\'s own official r1/r2 must not equal the independent manual tvScores value');
   assert.deepEqual(getCurrentTvScore(state), { r1: 3, r2: 1 });
 });
 

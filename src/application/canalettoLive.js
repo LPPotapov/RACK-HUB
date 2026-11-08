@@ -162,13 +162,17 @@ export const getCurrentTvScore = (liveState) => {
 // LIVE DRAFT SCORE (livescore hotfix) — the tournament director's
 // IN-PROGRESS score-entry value for a not-yet-confirmed Block or KO match,
 // published to the public livescore page (and OBS bracket overlay) BEFORE
-// Confirm/Complete Match is pressed. STRUCTURALLY SEPARATE from `tvScores`
-// above (the streaming staff's manual TV ticker score — see file header,
-// "there are intentionally separate concepts"): a different field, never
-// read by resolveTvMatch()/the TV overlay, and never merged with it. No
-// official command (recordKoResult/recordBlockMatchResult/etc.) ever reads
-// `liveDraftScores` either — a draft can only ever become official through
-// those existing commands themselves, which are always called with the
+// Confirm/Complete Match is pressed. A DIFFERENT field from `tvScores`
+// above (the streaming staff's independent manual TV ticker score) — but,
+// since the TV/match ticker score-source fix, resolveTvDisplayScore() below
+// now DOES read this as the TV overlay's preferred display value whenever
+// the selected match isn't confirmed yet (official result still always
+// wins once `done`; `tvScores` is only the last-resort fallback once
+// neither official nor draft exists — see resolveTvDisplayScore()'s own
+// header for the full precedence). Display-only either way: no official
+// command (recordKoResult/recordBlockMatchResult/etc.) ever reads
+// `liveDraftScores` — a draft can only ever become official through those
+// existing commands themselves, which are always called with the
 // score-entry component's own local input value, exactly as before this
 // hotfix; this module never feeds a draft value into an official command.
 //
@@ -207,6 +211,45 @@ export const clearLiveDraftScore = (liveState, pointer) => {
 export const getLiveDraftScore = (liveState, pointer) => {
   const key = tvMatchKey(pointer);
   return (key && liveState.liveDraftScores?.[key]) || null;
+};
+
+// ---------------------------------------------------------------------------
+// TV/match ticker SCORE-SOURCE FIX — resolves what the public TV overlay
+// should actually display for the currently selected tvMatch, given THREE
+// possible score sources that must never be conflated:
+//   1. the OFFICIAL confirmed result (resolvedMatch.r1/r2, once `done`) —
+//      ALWAYS wins once confirmed; never overridden by a draft or by the
+//      independent manual `tvScores` value, which may still hold a stale
+//      number from before confirmation.
+//   2. the director's in-progress LIVE DRAFT (liveDraftScores, via the
+//      SAME getLiveDraftScore()/tvMatchKey() identity every Block/KO match
+//      card already uses — no second key format) — shown whenever the
+//      match isn't done yet and a draft exists. This is what makes "a
+//      director is mid-way through entering a score, before Confirm" show
+//      up on the broadcast ticker, which previously never happened: this
+//      field used to be read by the public Livescore page and the KO
+//      bracket overlay, but NEVER by resolveTvMatch()/the TV overlay.
+//   3. the independent, manual `tvScores` value (getCurrentTvScore() —
+//      streaming staff's own deliberate broadcast-only override, settable
+//      from TvScoreControlPage.jsx) — preserved as the LAST-RESORT
+//      fallback, only ever shown when there is genuinely nothing more
+//      authoritative (no official result, no draft) for this match. This
+//      keeps the manual override useful (e.g. a match the director hasn't
+//      touched yet, but staff want a specific number on screen) without
+//      ever letting it mask a real official/draft score.
+//   4. 0-0 if none of the above apply (resolvedMatch is null, or truly
+//      nothing has ever been set).
+//
+// Purely a DISPLAY decision — this function never writes anything, never
+// marks a match done, and never feeds into GBR/PERF/standings/KO
+// advancement; it only decides which already-existing, already-authoritative
+// value to read.
+export const resolveTvDisplayScore = (resolvedMatch, liveState) => {
+  if (!resolvedMatch) return { r1: 0, r2: 0 };
+  if (resolvedMatch.done) return { r1: resolvedMatch.r1, r2: resolvedMatch.r2 };
+  const draft = liveState.tvMatch && getLiveDraftScore(liveState, liveState.tvMatch);
+  if (draft) return { r1: draft.r1, r2: draft.r2 };
+  return getCurrentTvScore(liveState);
 };
 
 export const validateCanalettoLiveState = (state) => {
@@ -270,6 +313,9 @@ export const validateCanalettoLiveState = (state) => {
 //     sourceLabel,   // e.g. 'TOP16 SLOT 1' / 'QUARTERFINALS' / 'BLOCK A · ROUND 3'
 //     tbl,           // table label as currently assigned, or undefined
 //     target,        // race-to target for this match (KO stage or block's max_games)
+//     done,          // whether the OFFICIAL match result is confirmed (TV/match ticker
+//                     // score-source fix — never a separate/looser "close enough" check)
+//     r1, r2,        // the OFFICIAL match score (only meaningful once `done`)
 //     p1: { name, gbr, winPct },
 //     p2: { name, gbr, winPct }
 //   }
@@ -288,6 +334,9 @@ export const resolveTvMatch = (event, liveState) => {
       sourceLabel: koTickerSourceLabel(pointer.stage, pointer.matchNumber),
       tbl: match.tbl,
       target: KO_RACE_TO[pointer.stage],
+      done: match.done,
+      r1: match.r1,
+      r2: match.r2,
       p1: { name: match.p1.name, gbr: match.p1.gbr, winPct: expectedScore(match.p1.gbr, match.p2.gbr, gbrConfig.d) * 100 },
       p2: { name: match.p2.name, gbr: match.p2.gbr, winPct: expectedScore(match.p2.gbr, match.p1.gbr, gbrConfig.d) * 100 }
     };
@@ -304,6 +353,9 @@ export const resolveTvMatch = (event, liveState) => {
       sourceLabel: `BLOCK ${pointer.block} · ROUND ${pointer.roundNumber}`,
       tbl: match.tbl,
       target: config.max_games,
+      done: match.done,
+      r1: match.r1,
+      r2: match.r2,
       p1: { name: match.p1.name, gbr: match.p1.elo, winPct: expectedScore(match.p1.elo, match.p2.elo, config.d) * 100 },
       p2: { name: match.p2.name, gbr: match.p2.elo, winPct: expectedScore(match.p2.elo, match.p1.elo, config.d) * 100 }
     };
