@@ -231,3 +231,19 @@ test('App.jsx\'s eager graph is non-trivial and really does include the archive/
     assert.ok(visitedBasenames.includes(name), `expected App.jsx's eager graph to include ${name}`);
   });
 });
+
+// ---------------------------------------------------------------------------
+// URGENT ARCHITECTURE FIX ("bind OBS/live links to current director event")
+// regression guard: introducing canalettoWorkspace/the new event-selector
+// mapping must not touch the static archive or landing page at all — they
+// have no event-namespace concept whatsoever, Firebase-backed or not.
+// ---------------------------------------------------------------------------
+
+test('the archive and landing pages never reference the event-namespace selector mechanism at all', () => {
+  const archiveSource = readFileSync(path.join(__dirname, '../src/canaletto/live/CanalettoArchive2026Page.jsx'), 'utf8');
+  const landingSource = readFileSync(path.join(__dirname, '../src/canaletto/live/CanalettoLandingPage.jsx'), 'utf8');
+  [archiveSource, landingSource].forEach((source) => {
+    assert.ok(!source.includes('canalettoCloudPaths'), 'must not reference canalettoCloudPaths.js');
+    assert.ok(!/\bresolveEventSelector\b|\bCURRENT_EVENT_SELECTOR\b|\bCANALETTO_EVENT_ID\b/.test(source), 'must not reference the event-selector mechanism');
+  });
+});

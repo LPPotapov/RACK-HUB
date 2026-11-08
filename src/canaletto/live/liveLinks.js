@@ -7,7 +7,7 @@
 // deliberately not a routing library (offline-first MVP; "no
 // overengineering").
 
-import { IS_TEST_EVENT } from '../../firebase/canalettoCloudPaths.js';
+import { CURRENT_EVENT_SELECTOR } from '../../firebase/canalettoCloudPaths.js';
 
 export const LIVE_LINKS = [
   { key: 'livescore', label: 'Public Livescore', query: 'live=livescore' },
@@ -25,13 +25,16 @@ export const LIVE_LINKS = [
 // host yet; the route itself is what stays stable for when one exists).
 export const buildLiveUrl = (origin, pathname, query) => `${origin}${pathname}?${query}`;
 
-// Urgent testing-feature hotfix: while the DIRECTOR's own session is
-// running against the isolated test namespace (IS_TEST_EVENT — the ONE
-// central selection, see canalettoCloudPaths.js), every generated/copyable
-// public/OBS/stream link must carry `event=test` too, or clicking it would
-// silently open PRODUCTION data instead of the test tournament being
-// exercised. A production session (the default) appends nothing — every
-// existing generated link is byte-for-byte unchanged from before this
-// hotfix. Callers should build a link's full query via THIS helper rather
-// than reading `IS_TEST_EVENT`/re-parsing the URL themselves.
-export const withEventParam = (query) => (IS_TEST_EVENT ? `${query}&event=test` : query);
+// URGENT ARCHITECTURE FIX ("bind OBS/live links to current director
+// event"): every generated/copyable public/OBS/stream link must carry the
+// director's OWN active event selector EXPLICITLY — workspace, test, or
+// canaletto2026 (CURRENT_EVENT_SELECTOR, the ONE central selection, see
+// canalettoCloudPaths.js) — and must NEVER omit it. Omitting it used to be
+// safe when the implicit default was production; now that the implicit
+// default is the (possibly-empty) workspace namespace, a link that forgot
+// to carry the director's test/historical selector would silently open a
+// DIFFERENT tournament than the one the director is actually running —
+// exactly the bug this fix closes. Callers should build a link's full
+// query via THIS helper rather than reading CURRENT_EVENT_SELECTOR/
+// re-parsing the URL themselves.
+export const withEventParam = (query) => `${query}&event=${CURRENT_EVENT_SELECTOR}`;
