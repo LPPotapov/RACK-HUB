@@ -7,13 +7,21 @@
 // resolveTvMatch()'s NORMALIZED shape, identical whether the selected match
 // is a Block A/B Swiss match or a KO match (director correction pass —
 // "the ticker must work during Block A, Block B, Top16, QF, SF, Final").
-// The SCORE shown is resolveTvDisplayScore(resolved, liveState) (TV/match
-// ticker score-source fix) — the OFFICIAL result once the match is
-// confirmed; otherwise the director's in-progress LIVE DRAFT; otherwise
-// the independent, PER-MATCH manual broadcast score settable from either
-// the director's LIVE page or the streaming staff's TV Overlay Score
-// Control page; otherwise 0-0. See resolveTvDisplayScore()'s own header
-// for the full precedence/rationale.
+// The SCORE shown is resolveTvDisplayScore(resolved, event, liveState)
+// (TV/match ticker score-source fix) — the OFFICIAL result once the match
+// is confirmed; otherwise the director's in-progress LIVE DRAFT, read from
+// `event.liveDraftScores` (the PUBLIC event/publicState projection — see
+// derivePublicState() — NEVER from `liveState`/`/live`, which never
+// carries liveDraftScores at all — this exact mix-up was the realtime-
+// draft bug: the draft reached Firebase correctly the whole time, the
+// ticker was just reading the wrong node for it); otherwise the
+// independent, PER-MATCH manual broadcast score settable from either the
+// director's LIVE page or the streaming staff's TV Overlay Score Control
+// page; otherwise 0-0. See resolveTvDisplayScore()'s own header for the
+// full precedence/rationale. Realtime "for free": this page re-renders on
+// every `event`/`liveState` listener callback (useCloudPublicEvent()/
+// useCloudLiveState()), and the score is recomputed fresh on every render
+// — no polling, no cache, no extra subscription.
 //
 // LIVE/OBS correction pass — meta row redesign: the brand mark no longer
 // sits to one side of the whole ticker (that read as asymmetric); it is now
@@ -86,7 +94,7 @@ export const TvOverlayPage = () => {
   if (!resolved) return <EmptyOverlay />;
 
   const { sourceLabel, tbl, p1, p2 } = resolved;
-  const score = resolveTvDisplayScore(resolved, liveState);
+  const score = resolveTvDisplayScore(resolved, event, liveState);
 
   return (
     <div className="flex min-h-screen items-end justify-center bg-transparent p-4">

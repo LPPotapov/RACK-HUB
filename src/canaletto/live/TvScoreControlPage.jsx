@@ -149,7 +149,7 @@ export const TvScoreControlPage = () => {
   const { liveState, run, canWrite, auth, loaded } = useCloudLiveState();
   const resolved = resolveTvMatch(event, liveState);
   const score = getCurrentTvScore(liveState);
-  const onAirScore = resolveTvDisplayScore(resolved, liveState);
+  const onAirScore = resolveTvDisplayScore(resolved, event, liveState);
   const manualScoreIsOnAir = onAirScore.r1 === score.r1 && onAirScore.r2 === score.r2;
 
   if (!isFirebaseConfigured) return <CenteredStatus>Live Data Unavailable</CenteredStatus>;

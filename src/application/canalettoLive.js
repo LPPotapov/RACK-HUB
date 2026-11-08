@@ -214,21 +214,29 @@ export const getLiveDraftScore = (liveState, pointer) => {
 };
 
 // ---------------------------------------------------------------------------
-// TV/match ticker SCORE-SOURCE FIX — resolves what the public TV overlay
-// should actually display for the currently selected tvMatch, given THREE
-// possible score sources that must never be conflated:
+// TV/match ticker SCORE-SOURCE FIX (realtime-draft follow-up) — resolves
+// what the public TV overlay should actually display for the currently
+// selected tvMatch, given THREE possible score sources that must never be
+// conflated:
 //   1. the OFFICIAL confirmed result (resolvedMatch.r1/r2, once `done`) —
 //      ALWAYS wins once confirmed; never overridden by a draft or by the
 //      independent manual `tvScores` value, which may still hold a stale
 //      number from before confirmation.
-//   2. the director's in-progress LIVE DRAFT (liveDraftScores, via the
-//      SAME getLiveDraftScore()/tvMatchKey() identity every Block/KO match
-//      card already uses — no second key format) — shown whenever the
-//      match isn't done yet and a draft exists. This is what makes "a
-//      director is mid-way through entering a score, before Confirm" show
-//      up on the broadcast ticker, which previously never happened: this
-//      field used to be read by the public Livescore page and the KO
-//      bracket overlay, but NEVER by resolveTvMatch()/the TV overlay.
+//   2. the director's in-progress LIVE DRAFT — read from
+//      `publicEvent.liveDraftScores` (the SAME getLiveDraftScore()/
+//      tvMatchKey() identity every Block/KO match card and the public
+//      Livescore page already use — no second key format), via the SAME
+//      pointer currently selected in `liveState.tvMatch`. CRITICAL: this
+//      must be looked up against the PUBLIC EVENT projection
+//      (useCloudPublicEvent()'s `event`, i.e. `publicState` in Firebase —
+//      see derivePublicState() in canalettoPublicState.js, which is where
+//      `liveDraftScores` actually lives), NEVER against `liveState`
+//      itself (`/live` in Firebase) — `/live` only ever holds `tvMatch`/
+//      `tvScores`, never `liveDraftScores`. An earlier version of this
+//      function read `liveState.liveDraftScores`, which is always empty;
+//      the draft DID reach Firebase correctly the whole time, this
+//      function was just looking in the wrong node, so the ticker never
+//      updated after its first (coincidental) render.
 //   3. the independent, manual `tvScores` value (getCurrentTvScore() —
 //      streaming staff's own deliberate broadcast-only override, settable
 //      from TvScoreControlPage.jsx) — preserved as the LAST-RESORT
@@ -243,11 +251,16 @@ export const getLiveDraftScore = (liveState, pointer) => {
 // Purely a DISPLAY decision — this function never writes anything, never
 // marks a match done, and never feeds into GBR/PERF/standings/KO
 // advancement; it only decides which already-existing, already-authoritative
-// value to read.
-export const resolveTvDisplayScore = (resolvedMatch, liveState) => {
+// value to read. Realtime updates fall out of this for free: the caller
+// (TvOverlayPage.jsx) re-renders on every `event`/`liveState` change from
+// their respective Firebase listeners, and this function is a pure,
+// synchronous read of whatever those already are at render time — no
+// separate subscription, cache, or polling of its own.
+export const resolveTvDisplayScore = (resolvedMatch, publicEvent, liveState) => {
   if (!resolvedMatch) return { r1: 0, r2: 0 };
   if (resolvedMatch.done) return { r1: resolvedMatch.r1, r2: resolvedMatch.r2 };
-  const draft = liveState.tvMatch && getLiveDraftScore(liveState, liveState.tvMatch);
+  const pointer = liveState.tvMatch;
+  const draft = pointer && getLiveDraftScore(publicEvent, pointer);
   if (draft) return { r1: draft.r1, r2: draft.r2 };
   return getCurrentTvScore(liveState);
 };
